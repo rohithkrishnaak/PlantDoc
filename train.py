@@ -19,13 +19,15 @@ import numpy as np
 import timm
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 
 from src.model import CLASSES, MODEL_ARCH, MODEL_WEIGHTS
 
 TRAIN_DIR = Path("data/train")
-TEST_DIR = Path("data/test")
+VAL_FRACTION = 0.15
+SEED = 42
 WEIGHTS_PATH = Path(MODEL_WEIGHTS)
 METRICS_PATH = Path("training_metrics.json")
 
@@ -97,26 +99,36 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device} | Architecture: {MODEL_ARCH}")
 
-    # Load datasets
-    train_dataset = datasets.ImageFolder(str(TRAIN_DIR), transform=TRAIN_TRANSFORMS)
-    test_dataset = datasets.ImageFolder(str(TEST_DIR), transform=VAL_TRANSFORMS)
+    torch.manual_seed(SEED)
 
-    print(f"Dataset classes detected: {train_dataset.classes}")
-    assert train_dataset.classes == sorted(train_dataset.classes), "Classes must match sorted folder names"
-    
+    # Load datasets. The test split is never touched here: checkpoint selection
+    # uses a stratified validation split carved out of data/train.
+    full_train = datasets.ImageFolder(str(TRAIN_DIR), transform=TRAIN_TRANSFORMS)
+    full_val = datasets.ImageFolder(str(TRAIN_DIR), transform=VAL_TRANSFORMS)
+
+    print(f"Dataset classes detected: {full_train.classes}")
+    assert full_train.classes == sorted(full_train.classes), "Classes must match sorted folder names"
+
+    targets = np.array(full_train.targets)
+    train_idx, val_idx = train_test_split(
+        np.arange(len(targets)), test_size=VAL_FRACTION, stratify=targets, random_state=SEED
+    )
+    train_dataset = Subset(full_train, train_idx)
+    val_dataset = Subset(full_val, val_idx)
+
     # Class weights for loss
-    class_counts = np.bincount(train_dataset.targets)
+    class_counts = np.bincount(targets[train_idx])
     class_weights = 1.0 / np.maximum(class_counts, 1)
     class_weights = torch.FloatTensor(class_weights / class_weights.sum()).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
-    print(f"Train samples: {len(train_dataset)} | Test samples: {len(test_dataset)}")
+    print(f"Train samples: {len(train_dataset)} | Validation samples: {len(val_dataset)}")
 
     # Create backbone
-    num_classes = len(train_dataset.classes)
+    num_classes = len(full_train.classes)
     model = timm.create_model(MODEL_ARCH, pretrained=True, num_classes=num_classes)
     model = model.to(device)
 
@@ -135,7 +147,7 @@ def main():
     for epoch in range(1, NUM_EPOCHS_WARMUP + 1):
         t0 = time.time()
         tr_loss, tr_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc, val_top3 = evaluate(model, test_loader, criterion, device)
+        val_loss, val_acc, val_top3 = evaluate(model, val_loader, criterion, device)
         elapsed = time.time() - t0
         print(f"Epoch {epoch}/{NUM_EPOCHS_WARMUP} [{elapsed:.1f}s] - "
               f"Tr Loss: {tr_loss:.4f}, Tr Acc: {tr_acc:.1%} | "
@@ -157,7 +169,7 @@ def main():
     for epoch in range(1, NUM_EPOCHS_FINETUNE + 1):
         t0 = time.time()
         tr_loss, tr_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc, val_top3 = evaluate(model, test_loader, criterion, device)
+        val_loss, val_acc, val_top3 = evaluate(model, val_loader, criterion, device)
         scheduler.step()
         elapsed = time.time() - t0
 
@@ -181,7 +193,7 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(history, f, indent=2)
 
-    print(f"\nTraining Complete! Best Test Accuracy: {best_val_acc:.1%}")
+    print(f"\nTraining Complete! Best Validation Accuracy: {best_val_acc:.1%}")
     print(f"Weights saved at: {WEIGHTS_PATH}")
 
 
