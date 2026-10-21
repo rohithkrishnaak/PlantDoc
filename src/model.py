@@ -17,11 +17,12 @@ from PIL import Image
 from torchvision import transforms
 
 CLASSES = [
+    "Potato Early Blight",
+    "Potato Late Blight",
     "Tomato Bacterial Spot",
     "Tomato Early Blight",
     "Tomato Healthy",
-    "Potato Early Blight",
-    "Potato Healthy",
+    "Tomato Late Blight",
 ]
 
 MODEL_ARCH = os.getenv("MODEL_ARCH", "efficientnet_b0")
