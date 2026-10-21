@@ -24,6 +24,8 @@ class GradCAM:
 
     def _find_target_layer(self) -> torch.nn.Module:
         """Find the final convolutional layer of the backbone."""
+        if getattr(self.model, "gradcam_target", None) is not None:
+            return self.model.gradcam_target
         if hasattr(self.model, "conv_head") and self.model.conv_head is not None:
             return self.model.conv_head
         # Fallback search for last Conv2d layer
@@ -53,7 +55,8 @@ class GradCAM:
         orig_np = np.array(image.convert("RGB"))
 
         # Preprocess input tensor
-        x = PREPROCESS(image.convert("RGB")).unsqueeze(0).to(next(self.model.parameters()).device)
+        transform = getattr(self.model, "input_transform", PREPROCESS)
+        x = transform(image.convert("RGB")).unsqueeze(0).to(next(self.model.parameters()).device)
         x.requires_grad_(True)
 
         logits = self.model(x)

@@ -16,6 +16,9 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from src.hybrid import HybridNet
+from src.preprocess import apply_clahe
+
 CLASSES = [
     "Potato Early Blight",
     "Potato Late Blight",
@@ -26,6 +29,7 @@ CLASSES = [
 ]
 
 MODEL_ARCH = os.getenv("MODEL_ARCH", "efficientnet_b0")
+HYBRID_WEIGHTS = os.getenv("HYBRID_WEIGHTS", "weights/plantdoc_hybrid.pth")
 MODEL_WEIGHTS = os.getenv("MODEL_WEIGHTS", "weights/plantdoc_effnet_b0.pth")
 USE_PRETRAINED = os.getenv("USE_PRETRAINED_BACKBONE", "true").lower() == "true"
 
@@ -42,6 +46,8 @@ class PlantDocModel:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.classes = CLASSES
         self.weights_source = "random-init (demo)"
+        self.use_clahe = False
+        self.tta = False
         self.model = self._build(arch, weights)
         if self.is_demo:
             # An untrained head emits arbitrary but often very confident logits.
@@ -53,6 +59,17 @@ class PlantDocModel:
 
     def _build(self, arch: str, weights: str) -> torch.nn.Module:
         n = len(self.classes)
+        hybrid = Path(HYBRID_WEIGHTS)
+        if hybrid.is_file():
+            ckpt = torch.load(hybrid, map_location="cpu", weights_only=False)
+            assert ckpt["classes"] == self.classes, "Checkpoint classes differ from CLASSES"
+            self.use_clahe = bool(ckpt["clahe"])
+            self.tta = True
+            short = " + ".join(b.split(".")[0] for b in ckpt["backbones"])
+            self.weights_source = f"hybrid {short}{' + CLAHE' if self.use_clahe else ''}"
+            model = HybridNet.from_checkpoint(ckpt)
+            model.input_transform = self.transform
+            return model
         path = Path(weights)
         if path.is_file():
             model = timm.create_model(arch, pretrained=False, num_classes=n)
@@ -74,11 +91,21 @@ class PlantDocModel:
     def is_demo(self) -> bool:
         return "demo" in self.weights_source
 
+    def transform(self, image: Image.Image) -> torch.Tensor:
+        """PIL image -> normalised tensor, applying CLAHE if the checkpoint was trained with it."""
+        image = image.convert("RGB")
+        if self.use_clahe:
+            image = apply_clahe(image)
+        return PREPROCESS(image)
+
     @torch.inference_mode()
     def predict(self, image, top_k: int = 3) -> list[tuple[str, float]]:
         if isinstance(image, np.ndarray):
             image = Image.fromarray(image)
-        x = PREPROCESS(image.convert("RGB")).unsqueeze(0).to(self.device)
-        probs = torch.softmax(self.model(x), dim=1)[0].cpu()
+        x = self.transform(image).unsqueeze(0).to(self.device)
+        logits = self.model(x)
+        if self.tta:  # average with the horizontally flipped view
+            logits = (logits + self.model(torch.flip(x, dims=[3]))) / 2
+        probs = torch.softmax(logits, dim=1)[0].cpu()
         top = torch.topk(probs, k=min(top_k, len(self.classes)))
         return [(self.classes[i], float(p)) for p, i in zip(top.values, top.indices)]

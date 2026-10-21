@@ -1,0 +1,12 @@
+{
+  "backbones": [
+    "swin_tiny_patch4_window7_224.ms_in22k_ft_in1k",
+    "vit_base_patch14_dinov2.lvd142m",
+    "convnext_tiny.fb_in22k_ft_in1k"
+  ],
+  "clahe": true,
+  "C": 0.005,
+  "oof_cv_acc": 0.6266173752310537,
+  "temperature": 1.35,
+  "n_train": 541
+}
