@@ -1,0 +1,9 @@
+torch
+torchvision
+timm
+opencv-python
+scikit-fuzzy
+streamlit
+pillow
+numpy
+python-dotenv
