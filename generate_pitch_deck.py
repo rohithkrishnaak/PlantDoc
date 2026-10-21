@@ -130,11 +130,11 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
         "Leaf Coverage: Dual HSV green + lesion masks ensure leaf fills the frame.",
         "Fuzzy Scoring: Soft transitions prevent brittle cliff-edge rejections."
     ])
-    add_card(s3, 4.8, 1.8, 3.7, 5.0, "2. Transfer Classifier", [
-        "Backbone: EfficientNet-B0 (timm), chosen for ultra-fast mobile CPU inference.",
-        "Pretrained on ImageNet, fine-tuned on PlantDoc field photos.",
-        "Heavy domain augmentations: Random affine, color jitter, multi-angle flips.",
-        "Class-weighted loss function handles real-world class imbalances."
+    add_card(s3, 4.8, 1.8, 3.7, 5.0, "2. Hybrid Classifier", [
+        "CLAHE on the LAB L-channel normalises uneven field lighting.",
+        "Fuses frozen Swin-T + DINOv2 ViT-B + ConvNeXt-T features (CNN + Transformer).",
+        "Chosen from 6 backbones and 10 hybrids by 5-fold CV: 62.7% vs 50.1% for EfficientNet-B0.",
+        "Class-balanced linear head; temperature-calibrated confidence (0.37 s on CPU)."
     ])
     add_card(s3, 8.8, 1.8, 3.7, 5.0, "3. Mamdani Trust Engine", [
         "Inputs: Quality Score + Top-1 Softmax Confidence.",
@@ -149,7 +149,7 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
     s4 = prs.slides.add_slide(blank_layout)
     add_header(s4, "Completed Stretch Goals: Explainability & Farmer First")
     add_card(s4, 0.8, 1.8, 3.7, 5.0, "🔬 Grad-CAM Heatmaps", [
-        "Computes gradients on final conv layer (conv_head).",
+        "Computes gradients on the ConvNeXt branch of the hybrid.",
         "Generates heatmaps highlighting infected spots and margins.",
         "Farmers & agronomists can verify the AI looked at actual lesions, not soil or background."
     ])
@@ -171,14 +171,14 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
     add_header(s5, "Held-Out Evaluation & Coverage Curve Metrics")
     add_card(s5, 0.8, 1.8, 5.6, 5.0, "📊 Held-Out Test Evaluation", [
         "Evaluated on 52 held-out real field photos from the IIT PlantDoc dataset.",
-        "Top-1 Accuracy: 50.00% | Top-3 Accuracy: 76.92% on difficult field photos.",
+        "Top-1 Accuracy: 61.54% | Top-3 Accuracy: 100% (EfficientNet-B0: 38.5% | 80.8%).",
         "Quality Gate Pass Rate: 84.62% (filters out severe blur and extreme shadows).",
-        "Diagnostic Accuracy on TRUSTED photos jumps to 60.00% (peaks at 71.4%).",
+        "Diagnostic Accuracy on TRUSTED photos jumps to 81.25% (peaks at 85.0%).",
         "Strict adherence to Responsible AI: Honest metrics, zero lab-photo contamination."
     ])
     add_card(s5, 6.8, 1.8, 5.6, 5.0, "📈 Coverage Curve Proof", [
         "Evaluates Selective Accuracy vs Coverage across Trust thresholds [0.35 to 0.85].",
-        "Key Finding: Filtering unconfident/poor images yields a +10% to +21.4% precision boost.",
+        "Key Finding: Filtering unconfident/poor images yields a +19.7 to +23.5 point precision boost.",
         "Proves that our Mamdani Fuzzy Trust Engine successfully eliminates confident false diagnoses.",
         "Protects Indian farmers from spending money on incorrect chemical fungicides."
     ])

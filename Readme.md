@@ -28,7 +28,7 @@ Plant diseases destroy up to 40% of Indian farmers' harvest, with early detectio
 ### Our Solution
 **PlantDoc** is a mobile-first field diagnostic assistant designed with **Responsible AI and Explainability** at its core:
 1. **OpenCV Image Quality Gate**: Evaluates Laplacian variance (blur), HSV V-channel mean (brightness), and dual-mask leaf canopy coverage. Rejects unusable photos with actionable retake tips (*"move closer"*, *"tap to focus"*).
-2. **Transfer Learning Classifier**: EfficientNet-B0 backbone fine-tuned on real-world noisy field images from the IIT PlantDoc dataset (CC BY 4.0).
+2. **Hybrid CNN + Transformer Classifier**: CLAHE contrast normalisation followed by fused features from three frozen pretrained backbones (Swin-T, DINOv2 ViT-B, ConvNeXt-T), a class-balanced linear head, and temperature-calibrated confidence. It is trained on real-world noisy field images from the IIT PlantDoc dataset (CC BY 4.0).
 3. **Mamdani Fuzzy Trust Engine**: Combines image quality and softmax confidence through fuzzy rules. When an image is poor or the model is ambiguous, PlantDoc outputs: **`"Not sure, please consult an agricultural expert."`**
 4. **Grad-CAM Explainability (Stretch Goal 1)**: Visual saliency heatmaps highlighting leaf lesions so farmers and agronomists can verify *what* drove the diagnosis.
 5. **Multilingual Interface (Stretch Goal 2)**: Full UI localization in English, Hindi (हिन्दी), and Tamil (தமிழ்).
@@ -46,7 +46,7 @@ Plant diseases destroy up to 40% of Indian farmers' harvest, with early detectio
          │
          ├─── (Score < 0.50) ──► ❌ Reject with Actionable Retake Advice ("move closer", "avoid glare")
          ▼ (Score ≥ 0.50)
-[Fine-Tuned EfficientNet-B0] ──► Top-3 Predictions & Softmax Probabilities
+[CLAHE ► Hybrid Swin-T ⊕ DINOv2-B ⊕ ConvNeXt-T] ──► Top-3 Calibrated Probabilities
          │
          ▼
 [Mamdani Fuzzy Trust Engine] (Quality Score × Model Confidence)
@@ -68,15 +68,17 @@ Evaluated strictly on held-out test field photos from the official IIT PlantDoc 
 
 | Metric | Result | Description |
 |---|---|---|
-| **Top-1 Test Accuracy** | **50.00%** | Unfiltered baseline on difficult field photos |
-| **Top-3 Test Accuracy** | **76.92%** | Correct disease within top 3 ranked candidates |
+| **Top-1 Test Accuracy** | **61.54%** | Unfiltered, on difficult field photos (EfficientNet-B0 baseline: 38.46%) |
+| **Top-3 Test Accuracy** | **100.00%** | Correct disease within the top 3 ranked candidates (baseline: 80.77%) |
 | **Quality Gate Pass Rate** | **84.62%** | Filters out extreme blur, darkness, and framing defects |
-| **Accuracy on TRUSTED Photos** | **60.00%** | **+10.00% boost** when filtered by Trust Engine |
-| **Peak Selective Accuracy** | **71.43%** | Achieved at Trust Threshold $\ge 0.69$ |
+| **Accuracy on TRUSTED Photos** | **81.25%** | **+19.7 points** over unfiltered when filtered by the Trust Engine (16/52 photos trusted) |
+| **Peak Selective Accuracy** | **85.00%** | At Trust Threshold $\ge 0.61$ (38.5% coverage) |
+
+> With only 52 test photos, each figure carries roughly ±7 points of uncertainty. 5-fold cross-validation on the training split agrees: 62.7% for the hybrid vs. 50.1% for a frozen EfficientNet-B0. Details are in [DEV_LOG.md](./DEV_LOG.md).
 
 ### Coverage Curve Analysis
 ![Coverage Curve](./coverage_curve.png)
-As the Mamdani Trust Engine filters out low-trust and poor-quality photos, diagnostic precision on accepted images rises sharply (from 50% to over 71%), confirming that the system successfully mitigates dangerous false diagnoses.
+As the Mamdani Trust Engine filters out low-trust and poor-quality photos, diagnostic precision on accepted images rises sharply (from 61.5% unfiltered to 85% at a trust threshold of 0.61), confirming that the system successfully mitigates dangerous false diagnoses.
 
 ---
 
