@@ -7,3 +7,5 @@ streamlit
 pillow
 numpy
 python-dotenv
+scikit-learn
+matplotlib
