@@ -1,0 +1,8 @@
+{
+  "max_distance": 4,
+  "n_train": 510,
+  "n_test": 45,
+  "cross_split_duplicates": [],
+  "train_duplicate_groups": 10,
+  "train_label_conflicts": []
+}

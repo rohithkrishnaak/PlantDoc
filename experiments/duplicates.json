@@ -1,0 +1,120 @@
+{
+  "max_distance": 4,
+  "n_train": 541,
+  "n_test": 52,
+  "cross_split_duplicates": [
+    {
+      "test": "data\\test\\Potato Early Blight\\0002.jpg",
+      "train": "data\\train\\Potato Late Blight\\0049.jpg",
+      "distance": 0,
+      "exact": true,
+      "same_class": false
+    },
+    {
+      "test": "data\\test\\Potato Early Blight\\0005.jpg",
+      "train": "data\\train\\Tomato Early Blight\\0059.jpg",
+      "distance": 0,
+      "exact": true,
+      "same_class": false
+    },
+    {
+      "test": "data\\test\\Potato Late Blight\\0001.jpg",
+      "train": "data\\train\\Potato Early Blight\\0007.jpg",
+      "distance": 0,
+      "exact": true,
+      "same_class": false
+    },
+    {
+      "test": "data\\test\\Potato Late Blight\\0004.jpg",
+      "train": "data\\train\\Potato Early Blight\\0024.jpg",
+      "distance": 0,
+      "exact": true,
+      "same_class": false
+    },
+    {
+      "test": "data\\test\\Potato Late Blight\\0007.jpg",
+      "train": "data\\train\\Potato Early Blight\\0079.jpg",
+      "distance": 0,
+      "exact": true,
+      "same_class": false
+    },
+    {
+      "test": "data\\test\\Tomato Bacterial Spot\\0002.jpg",
+      "train": "data\\train\\Tomato Bacterial Spot\\0069.jpg",
+      "distance": 0,
+      "exact": false,
+      "same_class": true
+    },
+    {
+      "test": "data\\test\\Tomato Late Blight\\0002.jpg",
+      "train": "data\\train\\Tomato Late Blight\\0055.jpg",
+      "distance": 1,
+      "exact": false,
+      "same_class": true
+    }
+  ],
+  "train_duplicate_groups": 25,
+  "train_label_conflicts": [
+    [
+      "data\\train\\Potato Early Blight\\0008.jpg",
+      "data\\train\\Potato Late Blight\\0001.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0011.jpg",
+      "data\\train\\Potato Late Blight\\0003.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0018.jpg",
+      "data\\train\\Tomato Early Blight\\0021.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0019.jpg",
+      "data\\train\\Tomato Early Blight\\0016.jpg",
+      "data\\train\\Tomato Early Blight\\0077.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0021.jpg",
+      "data\\train\\Potato Late Blight\\0027.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0024.jpg",
+      "data\\train\\Tomato Late Blight\\0087.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0030.jpg",
+      "data\\train\\Tomato Late Blight\\0019.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0035.jpg",
+      "data\\train\\Tomato Late Blight\\0034.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0055.jpg",
+      "data\\train\\Tomato Late Blight\\0044.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0063.jpg",
+      "data\\train\\Tomato Early Blight\\0047.jpg"
+    ],
+    [
+      "data\\train\\Potato Early Blight\\0066.jpg",
+      "data\\train\\Tomato Early Blight\\0052.jpg"
+    ],
+    [
+      "data\\train\\Potato Late Blight\\0023.jpg",
+      "data\\train\\Tomato Late Blight\\0017.jpg"
+    ],
+    [
+      "data\\train\\Potato Late Blight\\0024.jpg",
+      "data\\train\\Tomato Late Blight\\0082.jpg"
+    ],
+    [
+      "data\\train\\Potato Late Blight\\0046.jpg",
+      "data\\train\\Tomato Early Blight\\0003.jpg"
+    ],
+    [
+      "data\\train\\Tomato Early Blight\\0067.jpg",
+      "data\\train\\Tomato Late Blight\\0100.jpg"
+    ]
+  ]
+}
