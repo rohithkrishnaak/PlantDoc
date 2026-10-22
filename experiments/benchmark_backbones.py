@@ -11,14 +11,13 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import timm
 import torch
 from PIL import Image
-from sklearn.linear_model import LogisticRegression
+from src.gpu_logreg import TorchLogisticRegression
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -87,9 +86,22 @@ def l2(x):
     return x / np.linalg.norm(x, axis=-1, keepdims=True)
 
 
+MERGE_MANIFEST = Path("experiments/merge_manifest.json")
+
+
 def groups_for(root: str) -> np.ndarray:
-    """Near-duplicate group ids in ImageFolder order, so copies never straddle a CV fold."""
-    return train_groups([Path(p) for p, _ in datasets.ImageFolder(root).samples])
+    """Near-duplicate group ids in ImageFolder order, so copies never straddle a CV fold.
+
+    For data/train_merged the groups written by src/merge_plantwild.py (MD5 +
+    dHash + DINOv2 similarity) are used; otherwise dHash groups.
+    """
+    paths = [Path(p) for p, _ in datasets.ImageFolder(root).samples]
+    if MERGE_MANIFEST.exists():
+        known = json.loads(MERGE_MANIFEST.read_text())["train_groups"]
+        if all(p.as_posix() in known for p in paths):
+            _, ids = np.unique([known[p.as_posix()] for p in paths], return_inverse=True)
+            return ids
+    return train_groups(paths)
 
 
 def cv_splits(y: np.ndarray, groups: np.ndarray, seed: int = 42):
@@ -101,8 +113,7 @@ def cv_score(x: np.ndarray, y: np.ndarray, C: float = 0.5, seed: int = 42, group
     groups = np.arange(len(y)) if groups is None else groups
     correct = 0
     for tr, te in cv_splits(y, groups, seed):
-        clf = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=3000,
-                                                                 class_weight="balanced"))
+        clf = make_pipeline(StandardScaler(), TorchLogisticRegression(C=C))
         clf.fit(x[tr].reshape(-1, x.shape[-1]), np.repeat(y[tr], 2))
         p = clf.predict_proba(x[te, 0]) + clf.predict_proba(x[te, 1])
         correct += (p.argmax(1) == y[te]).sum()
@@ -110,18 +121,26 @@ def cv_score(x: np.ndarray, y: np.ndarray, C: float = 0.5, seed: int = 42, group
 
 
 def main():
-    names = sys.argv[1:] or BACKBONES
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("backbones", nargs="*")
+    ap.add_argument("--train-dir", default="data/train")
+    ap.add_argument("--no-fusion", action="store_true")
+    args = ap.parse_args()
+    names = args.backbones or BACKBONES
+    root = args.train_dir
     results, feats = {}, {}
-    groups = groups_for("data/train")
-    Cs = (0.005, 0.02, 0.05, 0.2)
+    groups = groups_for(root)
+    Cs = (0.002, 0.005, 0.02, 0.05, 0.2)
 
     with mlfu.mlflow_run(
-        run_name="backbone-benchmarks",
-        tags={"experiment": "backbone_exploration"},
+        run_name=f"backbone-benchmarks-{Path(root).name}",
+        tags={"experiment": "backbone_exploration", "train_dir": root},
     ):
+        mlfu.log_params({"train_dir": root, "n_train": len(groups), "n_groups": len(np.unique(groups))})
         for name in names:
             for clahe in (False, True):
-                x, y = extract(name, "data/train", clahe)
+                x, y = extract(name, root, clahe)
                 feats[(name, clahe)] = l2(x)
                 best = max((cv_score(feats[(name, clahe)], y, C, groups=groups), C) for C in Cs)
                 key = f"{name} | {'CLAHE' if clahe else 'raw'}"
@@ -138,7 +157,7 @@ def main():
             if k[0] not in [t[0] for t in top]:
                 top.append(k)
         top = top[:4]
-        for r in (2, 3):
+        for r in (() if args.no_fusion else (2, 3)):
             for combo in itertools.combinations(top, r):
                 x = np.concatenate([feats[k] for k in combo], axis=-1)
                 best = max((cv_score(x, y, C, groups=groups), C) for C in Cs)
@@ -149,7 +168,8 @@ def main():
                     mlfu.log_params({"type": "hybrid", "combo": key, "C": best[1]})
                     mlfu.log_metric("cv_acc", float(best[0]))
 
-        out_path = Path("experiments/benchmark_results.json")
+        out_path = Path("experiments/benchmark_results.json" if root == "data/train"
+                        else f"experiments/benchmark_results_{Path(root).name}.json")
         out_path.write_text(json.dumps(results, indent=2))
         mlfu.log_artifact(out_path, artifact_path="benchmarks")
         mlfu.log_dict(results, "benchmark_results.json")

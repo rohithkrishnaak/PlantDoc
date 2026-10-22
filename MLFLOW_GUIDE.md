@@ -96,6 +96,21 @@ python -m experiments.benchmark_backbones
 
 ---
 
+### 5. PlantWild Merge, Fine-Tuning, Registry & Leaderboard
+```bash
+python -m src.merge_plantwild                       # run "data-merge-plantwild": leak-check metrics + manifest
+python train_finetune.py --epochs 20                # parent run + nested run per CV fold (per-epoch curves)
+python evaluate.py --test-dir data/test             # tagged test_set=test
+python evaluate.py --test-dir data/test_plantwild   # tagged test_set=test_plantwild
+python register_model.py --weights weights/plantdoc_finetuned.pth --alias champion
+python -m experiments.mlflow_leaderboard            # ranks training runs by OOF CV accuracy
+```
+- Training runs record the exact training file list as an MLflow **dataset input** (lineage).
+- In the fold runs, compare `train_acc` vs `val_acc` to spot over-fitting. `cv_val_acc_by_epoch` on the parent run is the curve used to pick the epoch count.
+- Load the registered model with `mlflow.pyfunc.load_model("models:/PlantDoc-LeafDoctor@champion")`. Input is a DataFrame with a `path` or `image_b64` column. Version tags hold its CV and held-out accuracy.
+
+---
+
 ## 🧪 Testing the MLflow Setup
 
 Run the automated MLflow test suite:
