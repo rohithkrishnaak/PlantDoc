@@ -1,6 +1,9 @@
-"""PlantDoc classifier: timm backbone with a 5-class transfer-learning head.
+"""PlantDoc classifier: timm backbone with a 6-class transfer-learning head.
 
 Weight loading order:
+0. Checkpoint at HYBRID_WEIGHTS: either a frozen-feature hybrid (train_hybrid.py,
+   src/hybrid.py) or an end-to-end fine-tuned model (train_finetune.py,
+   src/finetuned.py), chosen by its "type" field.
 1. Fine-tuned checkpoint at MODEL_WEIGHTS (state_dict or {"state_dict": ...}).
 2. ImageNet-pretrained backbone from timm (needs internet once) + fresh head.
 3. Randomly initialised network (offline fallback) so inference always runs.
@@ -17,6 +20,7 @@ from PIL import Image
 from torchvision import transforms
 
 from src.fuzzy_engine import TRUST_THRESHOLD
+from src.finetuned import FineTunedNet
 from src.hybrid import HybridNet
 from src.preprocess import apply_clahe
 
@@ -30,7 +34,10 @@ CLASSES = [
 ]
 
 MODEL_ARCH = os.getenv("MODEL_ARCH", "efficientnet_b0")
-HYBRID_WEIGHTS = os.getenv("HYBRID_WEIGHTS", "weights/plantdoc_hybrid.pth")
+# Fine-tuned ConvNeXt-T on PlantDoc + PlantWild (DEV_LOG 2d) if present, else the frozen-feature hybrid.
+HYBRID_WEIGHTS = os.getenv("HYBRID_WEIGHTS", next(
+    (p for p in ("weights/plantdoc_finetuned.pth", "weights/plantdoc_hybrid.pth") if Path(p).is_file()),
+    "weights/plantdoc_hybrid.pth"))
 MODEL_WEIGHTS = os.getenv("MODEL_WEIGHTS", "weights/plantdoc_effnet_b0.pth")
 USE_PRETRAINED = os.getenv("USE_PRETRAINED_BACKBONE", "true").lower() == "true"
 
@@ -43,14 +50,14 @@ PREPROCESS = transforms.Compose([
 
 
 class PlantDocModel:
-    def __init__(self, arch: str = MODEL_ARCH, weights: str = MODEL_WEIGHTS):
+    def __init__(self, arch: str = MODEL_ARCH, weights: str = MODEL_WEIGHTS, checkpoint: str | None = None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.classes = CLASSES
         self.weights_source = "random-init (demo)"
         self.use_clahe = False
         self.tta = False
         self.trust_threshold = TRUST_THRESHOLD
-        self.model = self._build(arch, weights)
+        self.model = self._build(arch, weights, checkpoint or HYBRID_WEIGHTS)
         if self.is_demo:
             # An untrained head emits arbitrary but often very confident logits.
             # Zero it so softmax is uniform and the trust engine reports UNCERTAIN.
@@ -59,9 +66,9 @@ class PlantDocModel:
             torch.nn.init.zeros_(head.bias)
         self.model = self.model.to(self.device).eval()
 
-    def _build(self, arch: str, weights: str) -> torch.nn.Module:
+    def _build(self, arch: str, weights: str, checkpoint: str) -> torch.nn.Module:
         n = len(self.classes)
-        hybrid = Path(HYBRID_WEIGHTS)
+        hybrid = Path(checkpoint)
         if hybrid.is_file():
             ckpt = torch.load(hybrid, map_location="cpu", weights_only=False)
             assert ckpt["classes"] == self.classes, "Checkpoint classes differ from CLASSES"
@@ -70,9 +77,13 @@ class PlantDocModel:
             # The checkpoint's OOF-chosen threshold, unless TRUST_THRESHOLD is set explicitly.
             if "TRUST_THRESHOLD" not in os.environ and "trust_threshold" in ckpt:
                 self.trust_threshold = float(ckpt["trust_threshold"])
-            short = " + ".join(b.split(".")[0] for b in ckpt["backbones"])
-            self.weights_source = f"hybrid {short}{' + CLAHE' if self.use_clahe else ''}"
-            model = HybridNet.from_checkpoint(ckpt)
+            if ckpt.get("type") == "finetuned":
+                self.weights_source = f"fine-tuned {ckpt['arch'].split('.')[0]}"
+                model = FineTunedNet.from_checkpoint(ckpt)
+            else:
+                short = " + ".join(b.split(".")[0] for b in ckpt["backbones"])
+                self.weights_source = f"hybrid {short}{' + CLAHE' if self.use_clahe else ''}"
+                model = HybridNet.from_checkpoint(ckpt)
             model.input_transform = self.transform
             return model
         path = Path(weights)
@@ -112,7 +123,7 @@ class PlantDocModel:
             image = Image.fromarray(image)
         x = self.transform(image).unsqueeze(0).to(self.device)
         similarity, is_ood = None, False
-        if isinstance(self.model, HybridNet):
+        if isinstance(self.model, (HybridNet, FineTunedNet)):
             logits, f = self.model.forward_with_features(x)
             if self.tta:  # average with the horizontally flipped view
                 logits2, f2 = self.model.forward_with_features(torch.flip(x, dims=[3]))

@@ -188,8 +188,8 @@ def test_image_modes_handled():
 
 def test_ood_rejects_non_leaf_photos():
     model = _model()
-    if model.model.__class__.__name__ != "HybridNet" or not model.model.bank.numel():
-        return  # OOD check needs the hybrid checkpoint's feature bank
+    if model.model.__class__.__name__ not in ("HybridNet", "FineTunedNet") or not model.model.bank.numel():
+        return  # OOD check needs a checkpoint with a feature bank
     from skimage import data as skdata
     for name in ("astronaut", "chelsea", "coffee", "rocket"):
         _, sim, is_ood = model.diagnose(Image.fromarray(getattr(skdata, name)()))

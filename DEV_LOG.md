@@ -14,14 +14,14 @@
          │
          ├─── (Score < 0.50) ──► ❌ Reject with Actionable Retake Advice ("move closer", "avoid glare")
          ▼ (Score ≥ 0.50)
-[CLAHE (LAB L-channel)] ──► [Hybrid: ConvNeXt-T ⊕ DINOv2 ViT-S + linear head] ──► Top-3 Predictions
+[Fine-tuned ConvNeXt-T (PlantDoc + PlantWild, 1492 photos)] ──► Top-3 Predictions
          │
          ├─── (far from every training photo) ──► ❌ "Does not look like a supported tomato/potato leaf"
          ▼
 [Mamdani Fuzzy Trust Engine] (Quality Score × Model Confidence)
          │
-         ├─── (Trust < 0.61, chosen on training CV) ──► ⚠️ "Not sure, please consult an agricultural expert."
-         ▼ (Trust ≥ 0.61)
+         ├─── (Trust < 0.37, chosen on training CV) ──► ⚠️ "Not sure, please consult an agricultural expert."
+         ▼ (Trust ≥ 0.37)
 [Trusted Diagnosis & Explainability]
          ├── Top-3 Ranked Predictions with Confidence Bars
          ├── 🔬 Grad-CAM Heatmap (Visual Explainability / Saliency)
@@ -38,6 +38,10 @@
 | `src/preprocess.py` | CLAHE contrast normalisation on the LAB L channel |
 | `experiments/benchmark_backbones.py` | Frozen-backbone ± CLAHE benchmark and fusion search (5-fold CV, train split only) |
 | `train_hybrid.py` | Fits the hybrid head + out-of-fold temperature → `weights/plantdoc_hybrid.pth` |
+| `src/merge_plantwild.py` | Leakage-safe merge of PlantWild tomato/potato into `data/train_merged`, held-out `data/test_plantwild` |
+| `train_finetune.py` / `src/finetuned.py` | Grouped-CV end-to-end fine-tuning → `weights/plantdoc_finetuned.pth` (current app model) |
+| `src/gpu_logreg.py` | GPU L-BFGS logistic regression (same objective as sklearn) for fast CV sweeps |
+| `register_model.py` / `experiments/mlflow_leaderboard.py` | MLflow Model Registry (`PlantDoc-LeafDoctor@champion`) and run leaderboard |
 | `src/gradcam.py` | Grad-CAM saliency map (hooks the ConvNeXt branch of the hybrid, or EfficientNet `conv_head`) (Stretch Goal 1) |
 | `src/i18n.py` | Multilingual localization dictionary for English, Hindi, and Tamil (Stretch Goal 2) |
 | `src/agri_advisory.py` | Expert agronomic care notes cited from ICAR and TNAU (Stretch Goal 3) |
@@ -126,7 +130,65 @@
   - The "not sure" reason and the out-of-distribution message are translated into Hindi and Tamil.
 - **Tests:** 12 checks pass. New ones cover: exact "not sure" text, CLAHE, duplicate hashing, small leaf on soil, image modes (L/RGBA/CMYK/P), out-of-distribution rejection, and no Grad-CAM hook leak.
 
+### 2d. PlantWild Data + End-to-End Fine-Tuning (22 Oct afternoon; current model)
+- **Goal:** lift accuracy past 70% with more in-the-wild photos, without leakage. Source: [PlantWild](https://tqwei05.github.io/PlantWild/) v1 and v2, tomato + potato classes only (`src/download_plantwild.py`).
+- **Audit before merging (`src/merge_plantwild.py`):**
+  - PlantWild_v2 adds **no new photos**: all 1145 are copies of v1 photos (1124 byte-identical), about 90 of them under a different label.
+  - **14 of the 45 PlantDoc test photos also exist in PlantWild**, some under a different class. A naive merge would have put 31% of the test set into training.
+  - dHash alone misses crops and re-edits (copies at dHash distance 15–19), so "same photo" is now MD5 **or** dHash ≤ 6 **or** DINOv2-S cosine ≥ 0.90. Unrelated photos of the same disease score ≤ 0.85.
+  - The stronger check also found **3 PlantDoc train photos that are crops of PlantDoc test photos**, which the earlier dHash-only split missed. They are now removed too.
+- **Merge rules (direct same-photo pairs):**
+  1. Any training candidate matching a test photo is dropped (20).
+  2. Any photo whose copy carries a different label anywhere (other dataset, other PlantWild class such as septoria, or a v2 relabel) is dropped as label noise (435).
+  3. PlantWild photos that are near-identical (cos ≥ 0.95) to an already kept photo are dropped as redundant (113).
+  - "Potato leaf" (healthy potato) has no class in our model, so it is used only for the conflict checks.
+- **Result:** 1492 training photos (451 PlantDoc + 1041 PlantWild, 195–288 per class) vs 510 before.
+  - A **second held-out test set, `data/test_plantwild` (189 photos)**, is made of whole PlantWild-only near-duplicate components, stratified by class.
+  - Verified (and unit-tested): the max train↔test cosine is 0.892, the min train↔test dHash is 11, and there are no MD5 overlaps. Every step is recorded in `experiments/merge_manifest.json`.
+  - CV groups come from the same components, so chained copies always share a fold.
+- **Frozen-feature benchmark on merged data** (grouped 5-fold CV, raw / CLAHE). More data lifted every backbone by 8–13 points:
+
+  | Backbone | Raw | CLAHE |
+  |---|---|---|
+  | ConvNeXt-T | 70.0% | 70.0% |
+  | Swin-T | 71.0% | 71.0% |
+  | DINOv2 ViT-S | 68.0% | 68.8% |
+  | DINOv2 ViT-B | 72.7% | 73.3% |
+  | DINOv2 ViT-L | 71.3% | 70.1% |
+  | EfficientNetV2-S | 67.7% | 67.2% |
+
+  CV logistic regression now runs on the GPU (`src/gpu_logreg.py`). It has the same objective as sklearn (99–100% prediction agreement, unit-tested) and is about 6× faster. The fusion search was stopped once fine-tuning clearly beat every frozen model.
+- **End-to-end fine-tuning (`train_finetune.py`).** Rejected at 510 photos (overfit); with 1492 it works.
+  - Setup: ConvNeXt-T (IN-22k), AdamW (lr 1e-4, head ×10, wd 0.05), 1-epoch warm-up + cosine, label smoothing 0.1, drop-path 0.1, class-weighted loss.
+  - Augmentations: random-resized crop (0.35–1), flips, rotation, colour jitter, blur, random erasing.
+  - Protocol: the same grouped 5-fold CV. Each fold logs per-epoch train/val loss and accuracy to a nested MLflow run.
+  - **CV accuracy by epoch:** 52.7 → 72.7 (ep 4) → 75.1 (ep 12) → **75.9 (ep 15)** → 75.8 (ep 20). Validation loss stays flat at ~0.70 and never rises, so longer training does not hurt.
+  - **Over-fitting check:** train 96.8% vs OOF 75.9%. The gap is expected with label smoothing and heavy augmentation; the flat validation curve is the evidence against harmful over-fitting.
+  - **Chosen on CV only:** 15 epochs for the final fit on all 1492 photos. **OOF CV 75.9%** (PlantDoc photos 70.7%, PlantWild photos 78.2%) vs 68.4% for the previous hybrid.
+  - Temperature 1.10 and trust threshold **0.37** are chosen on OOF logits by the same ≥ 80%-accuracy rule (71.9% OOF coverage at 80.1% accuracy). The OOD bank holds the 1492 pooled features (threshold 0.527).
+  - Checkpoint: `weights/plantdoc_finetuned.pth`, 55 MB fp16. It is the app's default; the hybrid is the fallback.
+- **MLflow** (shared `mlflow.db`, experiment `PlantDoc-NexAi`):
+  - The data merge is a run with leak-check metrics.
+  - Training runs log the exact file list as an MLflow dataset input (lineage), the C / epoch sweeps as stepped metrics, an OOF confusion matrix, per-class OOF recall and the train-OOF gap.
+  - Evaluation runs are tagged by test set.
+  - The chosen checkpoint is registered as a pyfunc model, **`PlantDoc-LeafDoctor` v1 `@champion`**, with its CV and both held-out results as version tags.
+  - `python -m experiments.mlflow_leaderboard` ranks runs by OOF accuracy, which is the only number used for selection.
+
 ### 3. Held-Out Evaluation & Coverage Curve (final, de-duplicated test set)
+- **Update (2d model, test sets used once after all choices were fixed on CV):**
+
+  | Metric | Previous hybrid (PlantDoc only) | **Fine-tuned ConvNeXt-T (PlantDoc + PlantWild)** |
+  |---|---|---|
+  | PlantDoc test (45): top-1 | 71.1% | **77.8%** (95% CI 64–89%) |
+  | PlantDoc test: top-3 | 95.6% | **97.8%** |
+  | PlantDoc test: answered / accuracy on answered | 35.6% / 93.8% | **75.6% / 79.4%** |
+  | PlantWild test (189): top-1 | 60.3% | **74.6%** (95% CI 68–81%) |
+  | PlantWild test: top-3 | 89.9% | **98.4%** |
+  | PlantWild test: answered / accuracy on answered | 27.5% / 80.8% | **69.8% / 80.3%** |
+  | Real leaves flagged OOD (PlantDoc / PlantWild) | — / 3.2% | 0% / 3.2% |
+
+  The trust engine now answers about twice as many photos, still at the ≥ 80% accuracy target set on CV. The higher accuracy on answered photos for the old model came at 36% coverage. Raising `TRUST_THRESHOLD` trades coverage back for accuracy (see `coverage_curve*.png`). Reports: `evaluation_report.json`, `evaluation_report_plantwild.json`, and `experiments/baseline_eval_plantwild_pdonly_hybrid3.json` for the baseline.
+- *Earlier result (2c model), kept for history:*
 - **45 held-out photos, test set used once, after all choices were made on training CV:**
 
   | Metric | Fine-tuned EffNet-B0 (dirty split) | **ConvNeXt-T + DINOv2-S + CLAHE** | 95% bootstrap CI |
@@ -151,7 +213,9 @@
 
 ## 🚫 Rejected Approaches
 - **PlantVillage pre-training:** Rejected because lab-photo models learn clean backgrounds and fail on field noise (the exact trap PS 2.2 avoids).
-- **End-to-end fine-tuning on 541 images:** overfit (70% train vs 40% validation). Replaced by frozen feature fusion.
+- **End-to-end fine-tuning on 541 images:** overfit (70% train vs 40% validation). Replaced by frozen feature fusion. *Revisited in 2d: with 1492 de-duplicated photos and grouped CV it beats frozen features (75.9% vs 73.3%) and is now the model.*
+- **Using PlantWild_v2 as extra data:** all of its photos are copies of v1; it is used only to detect relabelled (conflicting) photos.
+- **Merging PlantWild without embedding-level dedup:** dHash alone left crops of PlantDoc test photos in training.
 - **GAN / StyleGAN augmentation:** StyleGAN needs thousands of images per class and can invent lesions, which corrupts labels. Not feasible with ~100 images per class.
 - **GAN restoration (Real-ESRGAN / deblur) at inference:** hallucinated texture can add or erase lesions. Rejecting the photo and asking for a retake is safer.
 - **Vision Mamba / SSMs:** `mamba-ssm` needs Linux CUDA kernels. At 224 px (196 tokens) the linear-complexity advantage is negligible, Vim-Ti has about 4× the FLOPs of EfficientNet-B0 for similar ImageNet accuracy, and a weak inductive bias needs more data than we have.
@@ -178,7 +242,9 @@
 - [x] CUDA torch on RTX 5060
 - [ ] Deploy to Hugging Face Spaces and test on a phone
 - [ ] Native-speaker review of Hindi/Tamil text and care-note dosages
-- [ ] Optional: partial fine-tuning (last stage of each branch) with the GPU
+- [x] PlantWild tomato/potato merged with leakage checks (1492 train, 189-photo second test set)
+- [x] Fine-tuned ConvNeXt-T: 77.8% PlantDoc test / 74.6% PlantWild test top-1 (CV 75.9%)
+- [x] MLflow: dataset lineage, per-epoch curves, Model Registry `PlantDoc-LeafDoctor@champion`, leaderboard
 - [x] Stretch Goal 1 (Grad-CAM) completed
 - [x] Stretch Goal 2 (Multilingual UI: EN, HI, TA) completed
 - [x] Stretch Goal 3 (ICAR/TNAU Care Notes) completed
