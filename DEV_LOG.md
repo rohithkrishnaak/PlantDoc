@@ -10,17 +10,18 @@
 [Phone / Camera Upload] 
          │
          ▼
-[Image Quality Gate] (OpenCV Laplacian Blur, HSV Brightness, Leaf Coverage + Fuzzy FIS)
+[Image Quality Gate] (Laplacian + directional blur, HSV brightness, leaf coverage + Fuzzy FIS)
          │
          ├─── (Score < 0.50) ──► ❌ Reject with Actionable Retake Advice ("move closer", "avoid glare")
          ▼ (Score ≥ 0.50)
-[CLAHE (LAB L-channel)] ──► [Hybrid: Swin-T ⊕ DINOv2 ViT-B ⊕ ConvNeXt-T + calibrated head] ──► Top-3 Predictions
+[CLAHE (LAB L-channel)] ──► [Hybrid: ConvNeXt-T ⊕ DINOv2 ViT-S + linear head] ──► Top-3 Predictions
          │
+         ├─── (far from every training photo) ──► ❌ "Does not look like a supported tomato/potato leaf"
          ▼
 [Mamdani Fuzzy Trust Engine] (Quality Score × Model Confidence)
          │
-         ├─── (Trust < 0.65) ──► ⚠️ "Not sure, please consult an agricultural expert."
-         ▼ (Trust ≥ 0.65)
+         ├─── (Trust < 0.61, chosen on training CV) ──► ⚠️ "Not sure, please consult an agricultural expert."
+         ▼ (Trust ≥ 0.61)
 [Trusted Diagnosis & Explainability]
          ├── Top-3 Ranked Predictions with Confidence Bars
          ├── 🔬 Grad-CAM Heatmap (Visual Explainability / Saliency)
@@ -92,29 +93,57 @@
 - **Calibration:** temperature T = 1.35 was fitted on out-of-fold logits, because the fuzzy trust engine consumes softmax confidence and an overconfident head would undermine it. Prediction also averages logits over the original and horizontally flipped views.
 - **Checkpoint:** `weights/plantdoc_hybrid.pth` stores only the head, scaler and temperature (small). Backbone weights come from the timm / HF Hub cache, so the first run needs internet. `PlantDocModel` loads the hybrid when this file exists and otherwise falls back to EfficientNet-B0.
 
-### 3. Held-Out Evaluation & Coverage Curve Proof
-- **Current hybrid (52 test photos):**
+### 2c. Data Integrity, Leakage Fix & Final Model (22 Oct morning; current model)
+- **Why:** PS 2.2 warns "Internet-scraped images can repeat; check that no test image also sits in training." We hadn't checked.
+- **`src/dedup.py`:** MD5 for exact copies plus a 64-bit difference hash (Hamming ≤ 4) for re-encoded or resized copies.
+  - **7 of 52 test photos were also in training** (5 exact, 2 near). 5 of those carried a *different* label in train, e.g. the same photo filed as Potato Early Blight in test and Potato Late Blight in train.
+  - **15 duplicate groups inside train had conflicting labels**, 31 images in total (some even potato vs tomato). That is label noise in PlantDoc itself.
+  - **Action:** moved the 7 test duplicates to `data/test_removed/` and the 31 conflicting train images to `data/train_removed/`. The record is in `experiments/duplicates.json`. Result: 510 train and 45 test images, 0 cross-split duplicates.
+  - The remaining 10 same-label duplicate groups in train are kept together in one fold (`StratifiedGroupKFold`), so CV never tests on a copy of a training photo.
+- **Leakage check on the old model:** the 7 duplicates scored *lower* (28.6% top-1) than the clean 45 (66.7%), because their labels were contradictory. The leak did not inflate the earlier numbers, but the old figures were still on a dirty split, so all results below are on the clean one.
+- **Re-benchmark (grouped CV, clean data):** removing the label noise lifted every backbone by 2–5 points.
+  - Averaged over 3 CV seeds, **ConvNeXt-T + DINOv2 ViT-S + CLAHE scored 67.3%**, tied with the best 3-backbone hybrid (Swin-T + ConvNeXt-T + DINOv2-S, 67.3%) and ahead of the previous Swin-T + DINOv2-B + ConvNeXt-T (66.8%).
+  - It was chosen for having **~50 M parameters instead of ~140 M**: 0.13 s per photo on CPU instead of 0.37 s, which matters on a free 2-vCPU Hugging Face Space.
+  - CLAHE: +1.2 points for this pair, again within noise. It is kept for low-light robustness.
+- **Trust threshold chosen without the test set:** the 0.65 threshold was set by hand before calibration. `train_hybrid.py` now sweeps thresholds on *out-of-fold* predictions plus the quality-gate scores of the raw training photos. It picks the lowest threshold whose accepted photos reach ≥ 80% accuracy: **0.61** (35.7% OOF coverage, 80.2% OOF accuracy). This value is stored in the checkpoint and used by the app.
+- **"Not a supported leaf" (out-of-distribution) check:** the checkpoint stores the 510 training features. If a photo's nearest training photo has cosine similarity below **0.294** (2nd percentile of leave-group-out nearest-neighbour similarity on train), the app refuses to diagnose. In tests, non-leaf photos (astronaut, cat, coffee, rocket) are rejected, and 0 of the 45 real test leaves are rejected.
+- **Quality-gate fixes from a stress test** (`experiments/quality_gate_eval.py`, degrading the 38 test photos that pass when clean):
 
-  | Metric | EffNet-B0 fine-tuned | **Hybrid + CLAHE** |
+  | Degradation | Before fixes | After fixes |
   |---|---|---|
-  | Top-1 accuracy | 38.5% | **61.5%** |
-  | Top-3 accuracy | 80.8% | **100.0%** |
-  | Quality-gate pass rate | 84.6% | 84.6% |
-  | Trusted rate | 32.7% | 30.8% |
-  | Accuracy on TRUSTED | 47.1% | **81.3%** |
+  | Leaf too small on soil | **2.6%** rejected | **100%** |
+  | Motion blur | 65.8% | 78.9% |
+  | Defocus blur / dark / glare | 97% / 100% / 97% | unchanged |
 
-  The test set is small (±7 points at n=52), but the direction agrees with CV (+12 points over the best single backbone, +13 over frozen EfficientNet-B0).
-- *Earlier EfficientNet-B0 run (superseded):*
-- Evaluated on 52 held-out test photos:
-  - Overall Top-1 Accuracy: **50.00%**
-  - Overall Top-3 Accuracy: **76.92%**
-  - Quality Gate Pass Rate: **84.62%**
-  - Accuracy on TRUSTED photos: **60.00%** (+10.00% precision boost!)
-  - Peak Selective Accuracy: **71.43%** at Trust Threshold $\ge 0.69$.
-- **Conclusion:** The Coverage Curve mathematically proves that the Quality Gate and Mamdani Fuzzy Trust Engine filter out ambiguous and poor photos, preventing confident misdiagnoses.
+  1. Bare soil matched the "brown lesion" colour range and counted as leaf. Brown now counts only within ~15 px of de-speckled green tissue, and leaf outlines are filled so lesions inside a leaf still count.
+  2. Motion blur smears one direction, so a horizontal/vertical gradient-ratio signal was added. It only applies when the photo isn't already clearly sharp, because strong parallel veins also skew the ratio and a test caught that false rejection.
+  3. Retake tips put lighting first: glare and darkness also lower sharpness and hide green, which used to add misleading "blurry" and "move closer" tips.
+  4. The pass rate on real photos is unchanged: 89.8% train, 84.4% test.
+- **App robustness:**
+  - Grad-CAM registered new hooks on the shared cached model on every request (a leak); hooks are now removed after each call.
+  - HEIC (iPhone) uploads are supported, unreadable files get a friendly error, and huge photos are downscaled.
+  - When both a camera photo and an upload exist, the most recent one is used.
+  - The "not sure" reason and the out-of-distribution message are translated into Hindi and Tamil.
+- **Tests:** 12 checks pass. New ones cover: exact "not sure" text, CLAHE, duplicate hashing, small leaf on soil, image modes (L/RGBA/CMYK/P), out-of-distribution rejection, and no Grad-CAM hook leak.
+
+### 3. Held-Out Evaluation & Coverage Curve (final, de-duplicated test set)
+- **45 held-out photos, test set used once, after all choices were made on training CV:**
+
+  | Metric | Fine-tuned EffNet-B0 (dirty split) | **ConvNeXt-T + DINOv2-S + CLAHE** | 95% bootstrap CI |
+  |---|---|---|---|
+  | Top-1 accuracy | 38.5% | **66.7%** | 51–80% |
+  | Top-3 accuracy | 80.8% | **97.8%** | 93–100% |
+  | Quality-gate pass rate | 84.6% | 84.4% | |
+  | Real leaves flagged out-of-distribution | n/a | 0/45 | |
+  | Answered (trusted) | 32.7% | 42.2% (19/45) | |
+  | **Accuracy on answered photos** | 47.1% | **89.5%** (17/19) | 74–100% |
+
+- Per-class F1 on all 45 photos ranges from 0.59 (Tomato Early Blight) to 0.80 (Potato Late Blight). The most common confusion is Tomato Healthy read as Bacterial Spot (3). See `evaluation_report.json`, `confusion_matrix.png` and `experiments/test_predictions.csv`.
+- **Coverage curve:** answering every photo gives 66.7% correct; at the 0.61 operating point the app answers 42% and is right on 89.5%. It reduces confident wrong diagnoses but does not remove them (2 of 19 answered photos are wrong).
+- *Superseded:* the first EfficientNet-B0 run reported 50% top-1, but its checkpoint was chosen on the test set (fixed in `train.py`) and the split still had duplicates. Those numbers should not be quoted.
 
 ### 4. Stretch Goals Implemented
-1. **Grad-CAM Saliency Maps (`src/gradcam.py`):** Visual explainability hooked to `conv_head`. Shows farmers that the model inspects actual necrotic lesions rather than soil or fingers.
+1. **Grad-CAM Saliency Maps (`src/gradcam.py`):** Visual explainability hooked to the ConvNeXt branch of the hybrid (labelled as such in the UI). Shows farmers that the model inspects actual necrotic lesions rather than soil or fingers.
 2. **Multilingual Localization (`src/i18n.py`):** UI strings, retake advice, and disease terminology fully translated into Hindi (हिन्दी) and Tamil (தமிழ்).
 3. **Agronomic Care Notes (`src/agri_advisory.py`):** Curated cultural and chemical disease management advice cited directly from ICAR-CPRI, ICAR-IIHR, and TNAU Agritech portals.
 
@@ -126,6 +155,8 @@
 - **GAN / StyleGAN augmentation:** StyleGAN needs thousands of images per class and can invent lesions, which corrupts labels. Not feasible with ~100 images per class.
 - **GAN restoration (Real-ESRGAN / deblur) at inference:** hallucinated texture can add or erase lesions. Rejecting the photo and asking for a retake is safer.
 - **Vision Mamba / SSMs:** `mamba-ssm` needs Linux CUDA kernels. At 224 px (196 tokens) the linear-complexity advantage is negligible, Vim-Ti has about 4× the FLOPs of EfficientNet-B0 for similar ImageNet accuracy, and a weak inductive bias needs more data than we have.
+- **Keeping the 3-backbone Swin-T + DINOv2-B + ConvNeXt-T hybrid:** on clean data it scored no better than ConvNeXt-T + DINOv2-S (66.8% vs 67.3%) at ~3× the CPU cost.
+- **Lowering the trust threshold to answer more photos:** at 0.50 the app would answer ~51% of photos at ~77% OOF accuracy. We kept the ≥ 80% target, because a wrong diagnosis means the wrong pesticide.
 - **Per-branch CLAHE mixing:** looked +2.5 points better on one CV seed but complicates inference; across 3 seeds it was not distinguishable.
 - **Hard Boolean Thresholds:** Rejected in favor of Mamdani fuzzy membership, allowing soft degradation across borderline lighting and blur.
 - **Unverified Softmax Trust:** Softmax is notoriously overconfident on out-of-distribution field photos. Combining Image Quality with Softmax confidence via fuzzy logic ensures photo defects pull down the trust score.
@@ -139,8 +170,14 @@
 - [x] Dataset extracted (541 train, 52 test images across 6 classes)
 - [x] Model trained & weights saved (`weights/plantdoc_effnet_b0.pth`)
 - [x] Held-out evaluation performed & `coverage_curve.png` generated
-- [x] CLAHE preprocessing + hybrid Swin-T/DINOv2-B/ConvNeXt-T model (61.5% top-1, 100% top-3, 81.3% trusted accuracy)
-- [x] CUDA torch on RTX 5060; temperature-calibrated confidence
+- [x] Train/test de-duplication and label-conflict removal (`src/dedup.py`): 510 train / 45 test
+- [x] Final model ConvNeXt-T + DINOv2-S + CLAHE: 66.7% top-1, 97.8% top-3, 89.5% accuracy on answered photos
+- [x] Trust threshold (0.61) and out-of-distribution threshold chosen on training CV only
+- [x] Quality gate stress-tested and fixed (soil-as-leaf, motion blur, tip priority)
+- [x] Per-class results, confusion matrix, bootstrap CIs (`evaluate.py`)
+- [x] CUDA torch on RTX 5060
+- [ ] Deploy to Hugging Face Spaces and test on a phone
+- [ ] Native-speaker review of Hindi/Tamil text and care-note dosages
 - [ ] Optional: partial fine-tuning (last stage of each branch) with the GPU
 - [x] Stretch Goal 1 (Grad-CAM) completed
 - [x] Stretch Goal 2 (Multilingual UI: EN, HI, TA) completed
@@ -149,10 +186,12 @@
 - [x] PowerPoint Pitch Deck generated (`PlantDoc_Pitch_Deck.pptx`)
 - [x] 5-minute video presentation script drafted (`DEMO_SCRIPT.md`)
 - [x] Social media posts drafted (`SOCIAL_POSTS.md`)
-- [x] Git repo initialized with progressive commit history
+- [x] Git repo initialized
+
+**Commit history note:** on the first evening, work was done locally and committed in batches (several commits within seconds at 23:09 and 23:37 on 21 Oct, and at 01:20 on 22 Oct). Commit times show when work was committed, not when each piece was written. From the morning of 22 Oct, work is committed as each task finishes.
 
 ---
 
 ## 🤖 AI Assistance & Tool Disclosure
 As required by Section 3 of Hackathon Instructions:
-Initial scaffolding, fuzzy rule formulation, Grad-CAM hook integration, and PowerPoint generation were assisted by AI coding tools and verified with empirical unit tests and held-out evaluations.
+Claude Code (Anthropic) assisted with scaffolding, fuzzy rule formulation, Grad-CAM, the backbone benchmark, de-duplication, the quality-gate stress test and documentation. Every number in this log was produced by the scripts in this repository (`evaluate.py`, `train_hybrid.py`, `experiments/*.py`, `src/dedup.py`), and the team has reviewed the code.

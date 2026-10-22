@@ -12,7 +12,7 @@ Plant diseases account for devastating yield losses across Indian agriculture. W
 
 To solve this, our team built **PlantDoc**:
 1. 🛡️ **OpenCV Image Quality Gate**: Evaluates Laplacian blur, HSV lighting, and leaf canopy coverage via fuzzy inference, rejecting poor photos with actionable tips (*"move closer"*, *"tap to focus"*).
-2. 🧠 **Transfer Learning (EfficientNet-B0)**: Fine-tuned on real field photos from the IIT PlantDoc dataset (CC BY 4.0) with field-specific augmentations.
+2. 🧠 **Hybrid CNN + Transformer (ConvNeXt + DINOv2)**: frozen pretrained features plus CLAHE, trained on real field photos from the IIT PlantDoc dataset (CC BY 4.0). 66.7% top-1 and 97.8% top-3 on de-duplicated held-out photos; 89.5% correct on the photos it chooses to answer.
 3. ⚖️ **Mamdani Fuzzy Trust Engine**: Combines image quality with softmax confidence. If an image is borderline, PlantDoc never hallucinates—it outputs: *"Not sure, please consult an agricultural expert."*
 4. 🔬 **Explainable AI (Grad-CAM)**: Visual saliency heatmaps highlighting leaf lesions so farmers know *why* the model made its prediction.
 5. 🌐 **Vernacular Accessibility**: Full UI localization in English, Hindi (हिन्दी), and Tamil (தமிழ்).
@@ -34,7 +34,7 @@ Proud to present **PlantDoc** for #NEXAI2026 (Track 2: PS 2.2)! 🌿
 
 Most crop disease AI models fail on real phone photos taken in fields. PlantDoc fixes this with:
 ✅ OpenCV Fuzzy Quality Gate (rejects blur/shadows with tips)
-✅ EfficientNet-B0 on real field photos
+✅ ConvNeXt + DINOv2 hybrid on real field photos (89.5% correct when it answers)
 ✅ Mamdani Fuzzy Trust Engine (honest "Not sure" fallback)
 ✅ Grad-CAM heatmaps for explainability
 ✅ Hindi & Tamil UI + ICAR/TNAU care notes

@@ -125,22 +125,22 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
     add_header(s3, "System Architecture: Quality Gate + Fuzzy Trust")
     add_card(s3, 0.8, 1.8, 3.7, 5.0, "1. Quality Gate (OpenCV)", [
         "Resolution normalized to 512px.",
-        "Blur Detection: Variance of Laplacian catches shaky smartphone captures.",
+        "Blur: Laplacian variance + directional gradients catch defocus and motion blur.",
         "Lighting: HSV V-channel mean catches dark shadows & harsh glare.",
-        "Leaf Coverage: Dual HSV green + lesion masks ensure leaf fills the frame.",
+        "Leaf Coverage: green tissue + adjacent lesions; bare soil is not counted as leaf.",
         "Fuzzy Scoring: Soft transitions prevent brittle cliff-edge rejections."
     ])
     add_card(s3, 4.8, 1.8, 3.7, 5.0, "2. Hybrid Classifier", [
         "CLAHE on the LAB L-channel normalises uneven field lighting.",
-        "Fuses frozen Swin-T + DINOv2 ViT-B + ConvNeXt-T features (CNN + Transformer).",
-        "Chosen from 6 backbones and 10 hybrids by 5-fold CV: 62.7% vs 50.1% for EfficientNet-B0.",
-        "Class-balanced linear head; temperature-calibrated confidence (0.37 s on CPU)."
+        "Fuses frozen ConvNeXt-T (CNN) + DINOv2 ViT-S (Transformer) features.",
+        "Chosen from 6 backbones and 10 hybrids by grouped 5-fold CV: 66.5% vs 52.0% for EfficientNet-B0.",
+        "Rejects photos unlike any training leaf (out-of-distribution). 0.13 s per photo on CPU."
     ])
     add_card(s3, 8.8, 1.8, 3.7, 5.0, "3. Mamdani Trust Engine", [
         "Inputs: Quality Score + Top-1 Softmax Confidence.",
         "Rule Base: High confidence on poor quality is explicitly mapped to UNCERTAIN.",
         "Defuzzification: Centroid defuzzification yields scalar Trust ∈ [0, 1].",
-        "Threshold 0.65 triggers safe expert referral message."
+        "Threshold 0.61, chosen on training cross-validation (never the test set), triggers the expert referral."
     ])
 
     # -------------------------------------------------------------
@@ -170,17 +170,41 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
     s5 = prs.slides.add_slide(blank_layout)
     add_header(s5, "Held-Out Evaluation & Coverage Curve Metrics")
     add_card(s5, 0.8, 1.8, 5.6, 5.0, "📊 Held-Out Test Evaluation", [
-        "Evaluated on 52 held-out real field photos from the IIT PlantDoc dataset.",
-        "Top-1 Accuracy: 61.54% | Top-3 Accuracy: 100% (EfficientNet-B0: 38.5% | 80.8%).",
-        "Quality Gate Pass Rate: 84.62% (filters out severe blur and extreme shadows).",
-        "Diagnostic Accuracy on TRUSTED photos jumps to 81.25% (peaks at 85.0%).",
-        "Strict adherence to Responsible AI: Honest metrics, zero lab-photo contamination."
+        "45 held-out PlantDoc field photos, de-duplicated against training.",
+        "Top-1: 66.7% (95% CI 51-80%) | Top-3: 97.8% (fine-tuned EfficientNet-B0: 38.5% top-1).",
+        "Quality gate passes 84.4% of real test photos.",
+        "Answered photos (trusted): 42% of photos, 89.5% correct (17/19).",
+        "Per-class F1 0.59-0.80; most common error: healthy tomato read as bacterial spot."
     ])
     add_card(s5, 6.8, 1.8, 5.6, 5.0, "📈 Coverage Curve Proof", [
-        "Evaluates Selective Accuracy vs Coverage across Trust thresholds [0.35 to 0.85].",
-        "Key Finding: Filtering unconfident/poor images yields a +19.7 to +23.5 point precision boost.",
-        "Proves that our Mamdani Fuzzy Trust Engine successfully eliminates confident false diagnoses.",
-        "Protects Indian farmers from spending money on incorrect chemical fungicides."
+        "Accuracy on answered photos vs share of photos answered, across trust thresholds.",
+        "Answering everything: 66.7% correct. At our threshold: 89.5% correct on 42% of photos.",
+        "The trust engine sharply reduces confident wrong diagnoses; it does not remove them all.",
+        "Fewer wrong diagnoses means fewer wrong pesticide purchases."
+    ])
+
+    # -------------------------------------------------------------
+    # Slide 5b: Data Integrity & Honest Limits
+    # -------------------------------------------------------------
+    s5b = prs.slides.add_slide(blank_layout)
+    add_header(s5b, "Data Integrity, Robustness & Honest Limits")
+    add_card(s5b, 0.8, 1.8, 3.7, 5.0, "🧹 Leakage Removed", [
+        "PlantDoc is internet-scraped: copies repeat.",
+        "7 test photos also sat in training: removed from test.",
+        "15 photos filed under two different diseases (31 images): removed from training.",
+        "Near-duplicates kept in the same cross-validation fold."
+    ])
+    add_card(s5b, 4.8, 1.8, 3.7, 5.0, "📷 Quality Gate Stress Test", [
+        "Clean test photos, deliberately degraded:",
+        "Defocus blur 97% rejected · motion blur 79%.",
+        "Too dark 100% · glare 97% · leaf too small 100%.",
+        "Each rejection comes with the matching retake tip."
+    ])
+    add_card(s5b, 8.8, 1.8, 3.7, 5.0, "⚖️ Limitations", [
+        "Small test set (45 photos): wide confidence intervals.",
+        "Internet photos, not farmer phone captures.",
+        "2 crops, 6 classes; other crops rejected as unsupported.",
+        "Says 'not sure' for ~6 in 10 photos, by design."
     ])
 
     # -------------------------------------------------------------
@@ -192,13 +216,13 @@ def create_deck(filename="PlantDoc_Pitch_Deck.pptx"):
         "Live camera snapshot and instant gallery photo upload.",
         "Real-time visual feedback on image quality and retake tips.",
         "Expandable 'Why this result?' diagnostics tab showing fuzzy membership degrees.",
-        "Runs on standard mobile browsers with minimal latency (<150ms inference)."
+        "Runs on standard mobile browsers; about 0.13 s model inference per photo on CPU."
     ])
     add_card(s6, 6.8, 1.8, 5.6, 5.0, "🚀 Cloud Deployment Stack", [
         "Publicly accessible via Hugging Face Spaces / Streamlit Cloud.",
         "Containerized with lightweight CPU-optimized PyTorch dependencies.",
         "Clean .env configuration and robust offline fallback architecture.",
-        "Open-source GitHub repository with complete hourly commit logs."
+        "Open-source GitHub repository with full commit history and DEV_LOG."
     ])
 
     # -------------------------------------------------------------
