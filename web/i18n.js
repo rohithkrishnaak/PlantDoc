@@ -51,7 +51,7 @@ add("tip_1", "Fill the frame with one leaf", "फ्रेम में एक �
 add("tip_2", "Use daylight; avoid glare and hard shadows", "दिन की रोशनी लें; चमक और गहरी छाया से बचें", "பகல் ஒளி; கண்கூசும் ஒளி, கடும் நிழல் தவிர்க்கவும்");
 add("tip_3", "Hold steady and tap to focus", "फ़ोन स्थिर रखें और फ़ोकस के लिए टैप करें", "போனை அசையாமல் பிடித்து ஃபோகஸ் செய்யவும்");
 add("step_quality", "Checking photo quality", "फ़ोटो की गुणवत्ता जाँच रहे हैं", "படத் தரத்தைச் சோதிக்கிறது");
-add("step_model", "Diagnosing with CNN + Transformer", "CNN + ट्रांसफ़ॉर्मर से निदान", "CNN + டிரான்ஸ்ஃபார்மர் மூலம் கண்டறிகிறது");
+add("step_model", "Identifying the disease", "रोग की पहचान", "நோயை அடையாளம் காண்கிறது");
 add("step_trust", "Computing trust score", "भरोसा स्कोर निकाल रहे हैं", "நம்பக மதிப்பெண் கணக்கிடுகிறது");
 add("res_title", "Diagnosis", "निदान", "கண்டறிதல்");
 add("empty_t", "Your diagnosis will appear here", "आपका निदान यहाँ दिखेगा", "உங்கள் கண்டறிதல் இங்கே தோன்றும்");
