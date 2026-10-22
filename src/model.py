@@ -16,6 +16,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from src.fuzzy_engine import TRUST_THRESHOLD
 from src.hybrid import HybridNet
 from src.preprocess import apply_clahe
 
@@ -48,6 +49,7 @@ class PlantDocModel:
         self.weights_source = "random-init (demo)"
         self.use_clahe = False
         self.tta = False
+        self.trust_threshold = TRUST_THRESHOLD
         self.model = self._build(arch, weights)
         if self.is_demo:
             # An untrained head emits arbitrary but often very confident logits.
@@ -65,6 +67,9 @@ class PlantDocModel:
             assert ckpt["classes"] == self.classes, "Checkpoint classes differ from CLASSES"
             self.use_clahe = bool(ckpt["clahe"])
             self.tta = True
+            # The checkpoint's OOF-chosen threshold, unless TRUST_THRESHOLD is set explicitly.
+            if "TRUST_THRESHOLD" not in os.environ and "trust_threshold" in ckpt:
+                self.trust_threshold = float(ckpt["trust_threshold"])
             short = " + ".join(b.split(".")[0] for b in ckpt["backbones"])
             self.weights_source = f"hybrid {short}{' + CLAHE' if self.use_clahe else ''}"
             model = HybridNet.from_checkpoint(ckpt)
@@ -99,13 +104,27 @@ class PlantDocModel:
         return PREPROCESS(image)
 
     @torch.inference_mode()
-    def predict(self, image, top_k: int = 3) -> list[tuple[str, float]]:
+    def diagnose(self, image, top_k: int = 3) -> tuple[list[tuple[str, float]], float | None, bool]:
+        """Top-k predictions, similarity to the nearest training photo, and whether
+        the photo looks out of distribution (not a supported leaf). Similarity is
+        None for models without a feature bank."""
         if isinstance(image, np.ndarray):
             image = Image.fromarray(image)
         x = self.transform(image).unsqueeze(0).to(self.device)
-        logits = self.model(x)
-        if self.tta:  # average with the horizontally flipped view
-            logits = (logits + self.model(torch.flip(x, dims=[3]))) / 2
+        similarity, is_ood = None, False
+        if isinstance(self.model, HybridNet):
+            logits, f = self.model.forward_with_features(x)
+            if self.tta:  # average with the horizontally flipped view
+                logits2, f2 = self.model.forward_with_features(torch.flip(x, dims=[3]))
+                logits, f = (logits + logits2) / 2, (f + f2) / 2
+            if self.model.bank.numel():
+                similarity = float(self.model.similarity_to_train(f)[0])
+                is_ood = similarity < float(self.model.ood_threshold)
+        else:
+            logits = self.model(x)
         probs = torch.softmax(logits, dim=1)[0].cpu()
         top = torch.topk(probs, k=min(top_k, len(self.classes)))
-        return [(self.classes[i], float(p)) for p, i in zip(top.values, top.indices)]
+        return [(self.classes[i], float(p)) for p, i in zip(top.values, top.indices)], similarity, is_ood
+
+    def predict(self, image, top_k: int = 3) -> list[tuple[str, float]]:
+        return self.diagnose(image, top_k)[0]
