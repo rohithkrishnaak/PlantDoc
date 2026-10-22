@@ -204,3 +204,16 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 * **PowerPoint Pitch Deck:** [PlantDoc_Pitch_Deck.pptx](./PlantDoc_Pitch_Deck.pptx)
 * **5-Minute Video Presentation Script:** [DEMO_SCRIPT.md](./DEMO_SCRIPT.md)
 * **Social Media Announcements (#NEXAI2026):** [SOCIAL_POSTS.md](./SOCIAL_POSTS.md)
+---
+
+## 🖥️ Web frontend (production UI)
+
+The production UI lives in `web/` (static HTML/CSS/JS, EN / हिन्दी / தமிழ், light + dark) and is served by a FastAPI backend (`server.py`) that wraps the same quality gate, hybrid model, fuzzy trust engine, Grad-CAM and ICAR/TNAU advisories as the Streamlit demo.
+
+```bash
+pip install -r requirements.txt
+uvicorn server:app --reload          # http://127.0.0.1:8000
+docker build -t leaf-doctor . && docker run -p 7860:7860 leaf-doctor
+```
+
+`POST /api/diagnose` (multipart: `file`, `lang`) returns `status` ∈ `REJECTED_QUALITY | REJECTED_OOD | UNCERTAIN | TRUSTED`; `GET /api/health` reports model/weights state.
