@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 220" role="img" aria-label="Leaf illustration">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eef4e4"/>
+      <stop offset="1" stop-color="#d9e7c8"/>
+    </linearGradient>
+    <linearGradient id="leafA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fbf6a"/>
+      <stop offset="1" stop-color="#4f7a3a"/>
+    </linearGradient>
+    <linearGradient id="leafB" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b5d394"/>
+      <stop offset="1" stop-color="#6e9b4f"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="220" rx="28" fill="url(#sky)"/>
+  <circle cx="326" cy="40" r="18" fill="#f6e7b4" opacity="0.85"/>
+  <path d="M0 182 C 70 160, 130 196, 200 178 S 320 160, 360 176 L360 220 L0 220 Z" fill="#c4dbab"/>
+  <path d="M0 200 C 90 186, 170 214, 250 198 S 340 190, 360 196 L360 220 L0 220 Z" fill="#a9c98b"/>
+  <g transform="translate(96,0)">
+  <!-- stem -->
+  <path d="M180 206 C 178 170, 176 140, 170 104" stroke="#4f7a3a" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- left leaf -->
+  <path d="M174 150 C 130 152, 96 128, 84 92 C 124 86, 162 106, 174 150 Z" fill="url(#leafB)"/>
+  <path d="M174 150 C 146 130, 116 110, 88 94" stroke="#eef4e4" stroke-width="2" fill="none" opacity="0.7"/>
+  <!-- main leaf -->
+  <path d="M170 106 C 150 70, 166 30, 214 14 C 232 54, 218 96, 170 106 Z" fill="url(#leafA)"/>
+  <path d="M170 106 C 186 78, 200 46, 212 18" stroke="#eef4e4" stroke-width="2.4" fill="none" opacity="0.8"/>
+  <path d="M182 82 L 168 70 M190 64 L 176 50 M188 76 L 206 66 M196 56 L 212 46" stroke="#eef4e4" stroke-width="1.6" fill="none" opacity="0.6" stroke-linecap="round"/>
+  <!-- right leaf -->
+  <path d="M179 168 C 214 172, 246 154, 260 124 C 226 116, 192 132, 179 168 Z" fill="url(#leafA)" opacity="0.9"/>
+  <path d="M179 168 C 204 152, 230 136, 256 126" stroke="#eef4e4" stroke-width="2" fill="none" opacity="0.7"/>
+  <!-- scan frame -->
+  <g stroke="#2f4a23" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.55">
+    <path d="M118 28 h-18 v18"/><path d="M242 28 h18 v18"/>
+    <path d="M118 190 h-18 v-18"/><path d="M242 190 h18 v-18"/>
+  </g>
+  </g>
+</svg>
