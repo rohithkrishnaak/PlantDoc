@@ -9,3 +9,9 @@ data/
 Thumbs.db
 *.pdf
 experiments/cache/
+# MLflow tracking and artifacts
+mlruns/
+mlartifacts/
+*.sqlite
+mlflow.db
+.trash/

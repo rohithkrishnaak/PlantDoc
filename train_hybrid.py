@@ -21,6 +21,7 @@ from PIL import Image
 from torchvision import datasets
 
 from experiments.benchmark_backbones import cv_splits, extract, groups_for, l2
+from src import mlflow_utils as mlfu
 from src.fuzzy_engine import evaluate_trust
 from src.model import CLASSES
 from src.quality_gate import check_quality
@@ -90,59 +91,97 @@ def main():
     ap.add_argument("--C", type=float, default=0.2)
     ap.add_argument("--target-acc", type=float, default=0.80,
                     help="accuracy required on accepted photos when choosing the trust threshold")
+    ap.add_argument("--no-mlflow", action="store_true", help="Disable MLflow tracking for this run")
+    ap.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name override")
+    ap.add_argument("--run-name", type=str, default=None, help="MLflow run name")
     args = ap.parse_args()
 
-    parts = [extract(b, "data/train", args.clahe) for b in args.backbones]
-    y = parts[0][1]
-    x2 = np.concatenate([l2(p[0]) for p in parts], axis=-1)
+    run_name = args.run_name or f"hybrid-{'+'.join(b.split('.')[0] for b in args.backbones)}"
 
-    groups = groups_for("data/train")
-    oof = np.zeros((len(y), len(CLASSES)))
-    for tr, te in cv_splits(y, groups):
-        s, c = fit_head(x2[tr], y[tr], args.C)
-        oof[te] = view_avg_logits(s, c, x2[te])
-    cv_acc = float((oof.argmax(1) == y).mean())
-    T = fit_temperature(oof, y)
-    print(f"OOF CV accuracy: {cv_acc:.3f} | temperature: {T:.2f}")
+    with mlfu.mlflow_run(
+        run_name=run_name,
+        experiment_name=args.experiment_name,
+        enabled=not args.no_mlflow,
+        tags={"model_type": "hybrid_fusion", "clahe": str(args.clahe)},
+    ):
+        mlfu.log_params({
+            "backbones": args.backbones,
+            "clahe": args.clahe,
+            "C": args.C,
+            "target_acc": args.target_acc,
+            "num_classes": len(CLASSES),
+            "classes": ",".join(CLASSES),
+        })
 
-    # Trust threshold from out-of-fold predictions + quality of the raw training photos
-    z = oof / T
-    probs = np.exp(z - z.max(1, keepdims=True))
-    probs /= probs.sum(1, keepdims=True)
-    q = [check_quality(Image.open(p).convert("RGB")) for p, _ in datasets.ImageFolder("data/train").samples]
-    passed = np.array([r[0] for r in q])
-    quality = np.array([r[1] for r in q])
-    thr, cov, acc, sweep = choose_trust_threshold(probs, y, quality, passed, args.target_acc)
-    print(f"Trust threshold {thr:.2f}: OOF coverage {cov:.1%}, accuracy on accepted {acc:.1%}")
+        parts = [extract(b, "data/train", args.clahe) for b in args.backbones]
+        y = parts[0][1]
+        x2 = np.concatenate([l2(p[0]) for p in parts], axis=-1)
 
-    scaler, clf = fit_head(x2, y, args.C)
-    bank, ood_thr, nn_sim = ood_bank(scaler, x2, groups)
-    print(f"OOD threshold (2nd pct of leave-group-out NN similarity): {ood_thr:.3f}")
-    # The model averages logits over the two views at inference, matching training eval.
-    ckpt = {
-        "type": "hybrid",
-        "backbones": args.backbones,
-        "clahe": args.clahe,
-        "classes": CLASSES,
-        "feat_mean": torch.tensor(scaler.mean_, dtype=torch.float32),
-        "feat_scale": torch.tensor(scaler.scale_, dtype=torch.float32),
-        "head": {"weight": torch.tensor(clf.coef_, dtype=torch.float32),
-                 "bias": torch.tensor(clf.intercept_, dtype=torch.float32)},
-        "temperature": T,
-        "cv_acc": cv_acc,
-        "trust_threshold": thr,
-        "ood_bank": torch.tensor(bank),
-        "ood_threshold": ood_thr,
-    }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(ckpt, OUT)
-    Path("training_metrics_hybrid.json").write_text(json.dumps(
-        {"backbones": args.backbones, "clahe": args.clahe, "C": args.C,
-         "oof_cv_acc": cv_acc, "temperature": T, "n_train": int(len(y)),
-         "trust_threshold": thr, "target_acc": args.target_acc, "ood_threshold": ood_thr,
-         "oof_coverage_at_threshold": cov, "oof_accuracy_at_threshold": acc,
-         "oof_trust_sweep": [{"threshold": t, "coverage": c, "accuracy": a} for t, c, a in sweep]}, indent=2))
-    print(f"Saved {OUT}")
+        mlfu.log_param("n_train", int(len(y)))
+
+        groups = groups_for("data/train")
+        oof = np.zeros((len(y), len(CLASSES)))
+        for tr, te in cv_splits(y, groups):
+            s, c = fit_head(x2[tr], y[tr], args.C)
+            oof[te] = view_avg_logits(s, c, x2[te])
+        cv_acc = float((oof.argmax(1) == y).mean())
+        T = fit_temperature(oof, y)
+        print(f"OOF CV accuracy: {cv_acc:.3f} | temperature: {T:.2f}")
+
+        # Trust threshold from out-of-fold predictions + quality of the raw training photos
+        z = oof / T
+        probs = np.exp(z - z.max(1, keepdims=True))
+        probs /= probs.sum(1, keepdims=True)
+        q = [check_quality(Image.open(p).convert("RGB")) for p, _ in datasets.ImageFolder("data/train").samples]
+        passed = np.array([r[0] for r in q])
+        quality = np.array([r[1] for r in q])
+        thr, cov, acc, sweep = choose_trust_threshold(probs, y, quality, passed, args.target_acc)
+        print(f"Trust threshold {thr:.2f}: OOF coverage {cov:.1%}, accuracy on accepted {acc:.1%}")
+
+        scaler, clf = fit_head(x2, y, args.C)
+        bank, ood_thr, nn_sim = ood_bank(scaler, x2, groups)
+        print(f"OOD threshold (2nd pct of leave-group-out NN similarity): {ood_thr:.3f}")
+
+        # The model averages logits over the two views at inference, matching training eval.
+        ckpt = {
+            "type": "hybrid",
+            "backbones": args.backbones,
+            "clahe": args.clahe,
+            "classes": CLASSES,
+            "feat_mean": torch.tensor(scaler.mean_, dtype=torch.float32),
+            "feat_scale": torch.tensor(scaler.scale_, dtype=torch.float32),
+            "head": {"weight": torch.tensor(clf.coef_, dtype=torch.float32),
+                     "bias": torch.tensor(clf.intercept_, dtype=torch.float32)},
+            "temperature": T,
+            "cv_acc": cv_acc,
+            "trust_threshold": thr,
+            "ood_bank": torch.tensor(bank),
+            "ood_threshold": ood_thr,
+        }
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(ckpt, OUT)
+
+        metrics_data = {
+            "backbones": args.backbones, "clahe": args.clahe, "C": args.C,
+            "oof_cv_acc": cv_acc, "temperature": T, "n_train": int(len(y)),
+            "trust_threshold": thr, "target_acc": args.target_acc, "ood_threshold": ood_thr,
+            "oof_coverage_at_threshold": cov, "oof_accuracy_at_threshold": acc,
+            "oof_trust_sweep": [{"threshold": t, "coverage": c, "accuracy": a} for t, c, a in sweep]
+        }
+        Path("training_metrics_hybrid.json").write_text(json.dumps(metrics_data, indent=2))
+        print(f"Saved {OUT}")
+
+        mlfu.log_metrics({
+            "oof_cv_acc": cv_acc,
+            "temperature": T,
+            "trust_threshold": thr,
+            "oof_coverage_at_threshold": cov,
+            "oof_accuracy_at_threshold": acc,
+            "ood_threshold": ood_thr,
+        })
+        mlfu.log_artifact(OUT, artifact_path="checkpoints")
+        mlfu.log_artifact("training_metrics_hybrid.json", artifact_path="metrics")
+        mlfu.log_dict(metrics_data, "metrics_hybrid.json")
 
 
 if __name__ == "__main__":
