@@ -8,6 +8,7 @@ only. data/test is never used here.
 """
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import sys
@@ -18,11 +19,12 @@ import timm
 import torch
 from PIL import Image
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from torchvision import datasets, transforms
 
+from src.dedup import train_groups
 from src.preprocess import apply_clahe
 
 CACHE = Path("experiments/cache")
@@ -51,14 +53,16 @@ def build(name: str):
 @torch.inference_mode()
 def extract(name: str, root: str, clahe: bool) -> tuple[np.ndarray, np.ndarray]:
     """Returns features [N, 2, D] (original + hflip view) and labels."""
-    tag = f"{Path(root).name}_{name}_{'clahe' if clahe else 'raw'}.npz"
+    ds = datasets.ImageFolder(root)
+    # Key the cache on the exact file list so moving images (dedup) invalidates it.
+    fp = hashlib.md5("|".join(p for p, _ in ds.samples).encode()).hexdigest()[:8]
+    tag = f"{Path(root).name}_{name}_{'clahe' if clahe else 'raw'}_{fp}.npz"
     f = CACHE / tag
     if f.exists():
         d = np.load(f)
         return d["x"], d["y"]
     model, tf = build(name)
     model = model.to(DEVICE)
-    ds = datasets.ImageFolder(root)
     feats = []
     batch, out = [], []
     for path, _ in ds.samples:
@@ -82,11 +86,20 @@ def l2(x):
     return x / np.linalg.norm(x, axis=-1, keepdims=True)
 
 
-def cv_score(x: np.ndarray, y: np.ndarray, C: float = 0.5, seed: int = 42) -> float:
-    """5-fold CV. Train on both views; predict by averaging view probabilities."""
-    skf = StratifiedKFold(5, shuffle=True, random_state=seed)
+def groups_for(root: str) -> np.ndarray:
+    """Near-duplicate group ids in ImageFolder order, so copies never straddle a CV fold."""
+    return train_groups([Path(p) for p, _ in datasets.ImageFolder(root).samples])
+
+
+def cv_splits(y: np.ndarray, groups: np.ndarray, seed: int = 42):
+    return StratifiedGroupKFold(5, shuffle=True, random_state=seed).split(np.zeros(len(y)), y, groups)
+
+
+def cv_score(x: np.ndarray, y: np.ndarray, C: float = 0.5, seed: int = 42, groups=None) -> float:
+    """Grouped 5-fold CV. Train on both views; predict by averaging view probabilities."""
+    groups = np.arange(len(y)) if groups is None else groups
     correct = 0
-    for tr, te in skf.split(x[:, 0], y):
+    for tr, te in cv_splits(y, groups, seed):
         clf = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=3000,
                                                                  class_weight="balanced"))
         clf.fit(x[tr].reshape(-1, x.shape[-1]), np.repeat(y[tr], 2))
@@ -98,11 +111,13 @@ def cv_score(x: np.ndarray, y: np.ndarray, C: float = 0.5, seed: int = 42) -> fl
 def main():
     names = sys.argv[1:] or BACKBONES
     results, feats = {}, {}
+    groups = groups_for("data/train")
+    Cs = (0.005, 0.02, 0.05, 0.2)
     for name in names:
         for clahe in (False, True):
             x, y = extract(name, "data/train", clahe)
             feats[(name, clahe)] = l2(x)
-            best = max((cv_score(feats[(name, clahe)], y, C), C) for C in (0.05, 0.2, 1.0))
+            best = max((cv_score(feats[(name, clahe)], y, C, groups=groups), C) for C in Cs)
             key = f"{name} | {'CLAHE' if clahe else 'raw'}"
             results[key] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
             print(f"{key:60s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)
@@ -117,7 +132,7 @@ def main():
     for r in (2, 3):
         for combo in itertools.combinations(top, r):
             x = np.concatenate([feats[k] for k in combo], axis=-1)
-            best = max((cv_score(x, y, C), C) for C in (0.05, 0.2, 1.0))
+            best = max((cv_score(x, y, C, groups=groups), C) for C in Cs)
             key = " + ".join(f"{k[0].split('.')[0]}{'(C)' if k[1] else ''}" for k in combo)
             results[f"HYBRID {key}"] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
             print(f"HYBRID {key:53s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)

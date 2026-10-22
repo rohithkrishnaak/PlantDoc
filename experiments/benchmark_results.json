@@ -1,90 +1,90 @@
 {
   "efficientnet_b0.ra_in1k | raw": {
-    "cv_acc": 0.5009,
-    "C": 0.05
+    "cv_acc": 0.5196,
+    "C": 0.005
   },
   "efficientnet_b0.ra_in1k | CLAHE": {
-    "cv_acc": 0.5083,
-    "C": 0.05
+    "cv_acc": 0.5451,
+    "C": 0.02
   },
   "tf_efficientnetv2_s.in21k_ft_in1k | raw": {
-    "cv_acc": 0.5915,
-    "C": 0.05
+    "cv_acc": 0.6196,
+    "C": 0.005
   },
   "tf_efficientnetv2_s.in21k_ft_in1k | CLAHE": {
-    "cv_acc": 0.5656,
-    "C": 0.05
+    "cv_acc": 0.5804,
+    "C": 0.005
   },
   "convnext_tiny.fb_in22k_ft_in1k | raw": {
-    "cv_acc": 0.5989,
-    "C": 0.05
+    "cv_acc": 0.6392,
+    "C": 0.005
   },
   "convnext_tiny.fb_in22k_ft_in1k | CLAHE": {
-    "cv_acc": 0.5878,
-    "C": 0.05
+    "cv_acc": 0.6294,
+    "C": 0.005
   },
   "swin_tiny_patch4_window7_224.ms_in22k_ft_in1k | raw": {
-    "cv_acc": 0.5786,
-    "C": 0.05
+    "cv_acc": 0.6412,
+    "C": 0.005
   },
   "swin_tiny_patch4_window7_224.ms_in22k_ft_in1k | CLAHE": {
-    "cv_acc": 0.6007,
-    "C": 0.05
+    "cv_acc": 0.6333,
+    "C": 0.005
   },
   "vit_small_patch14_dinov2.lvd142m | raw": {
-    "cv_acc": 0.5749,
-    "C": 0.05
+    "cv_acc": 0.6314,
+    "C": 0.005
   },
   "vit_small_patch14_dinov2.lvd142m | CLAHE": {
-    "cv_acc": 0.5786,
-    "C": 0.05
+    "cv_acc": 0.6235,
+    "C": 0.005
   },
   "vit_base_patch14_dinov2.lvd142m | raw": {
-    "cv_acc": 0.6007,
-    "C": 0.05
+    "cv_acc": 0.6353,
+    "C": 0.005
   },
   "vit_base_patch14_dinov2.lvd142m | CLAHE": {
-    "cv_acc": 0.597,
+    "cv_acc": 0.651,
+    "C": 0.005
+  },
+  "HYBRID vit_base_patch14_dinov2(C) + swin_tiny_patch4_window7_224": {
+    "cv_acc": 0.6647,
+    "C": 0.005
+  },
+  "HYBRID vit_base_patch14_dinov2(C) + convnext_tiny": {
+    "cv_acc": 0.6588,
+    "C": 0.005
+  },
+  "HYBRID vit_base_patch14_dinov2(C) + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6647,
+    "C": 0.005
+  },
+  "HYBRID swin_tiny_patch4_window7_224 + convnext_tiny": {
+    "cv_acc": 0.6647,
+    "C": 0.005
+  },
+  "HYBRID swin_tiny_patch4_window7_224 + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6569,
+    "C": 0.005
+  },
+  "HYBRID convnext_tiny + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6784,
     "C": 0.05
   },
-  "HYBRID swin_tiny_patch4_window7_224(C) + vit_base_patch14_dinov2": {
-    "cv_acc": 0.5933,
-    "C": 0.05
+  "HYBRID vit_base_patch14_dinov2(C) + swin_tiny_patch4_window7_224 + convnext_tiny": {
+    "cv_acc": 0.6725,
+    "C": 0.005
   },
-  "HYBRID swin_tiny_patch4_window7_224(C) + convnext_tiny": {
-    "cv_acc": 0.6174,
-    "C": 1.0
+  "HYBRID vit_base_patch14_dinov2(C) + swin_tiny_patch4_window7_224 + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6608,
+    "C": 0.02
   },
-  "HYBRID swin_tiny_patch4_window7_224(C) + tf_efficientnetv2_s": {
-    "cv_acc": 0.6063,
-    "C": 0.05
+  "HYBRID vit_base_patch14_dinov2(C) + convnext_tiny + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6667,
+    "C": 0.005
   },
-  "HYBRID vit_base_patch14_dinov2 + convnext_tiny": {
-    "cv_acc": 0.6266,
-    "C": 0.05
-  },
-  "HYBRID vit_base_patch14_dinov2 + tf_efficientnetv2_s": {
-    "cv_acc": 0.6192,
-    "C": 0.05
-  },
-  "HYBRID convnext_tiny + tf_efficientnetv2_s": {
-    "cv_acc": 0.597,
-    "C": 0.05
-  },
-  "HYBRID swin_tiny_patch4_window7_224(C) + vit_base_patch14_dinov2 + convnext_tiny": {
-    "cv_acc": 0.6525,
-    "C": 0.05
-  },
-  "HYBRID swin_tiny_patch4_window7_224(C) + vit_base_patch14_dinov2 + tf_efficientnetv2_s": {
-    "cv_acc": 0.6118,
-    "C": 0.05
-  },
-  "HYBRID swin_tiny_patch4_window7_224(C) + convnext_tiny + tf_efficientnetv2_s": {
-    "cv_acc": 0.6211,
-    "C": 0.05
-  },
-  "HYBRID vit_base_patch14_dinov2 + convnext_tiny + tf_efficientnetv2_s": {
-    "cv_acc": 0.6118,
-    "C": 0.05
+  "HYBRID swin_tiny_patch4_window7_224 + convnext_tiny + vit_small_patch14_dinov2": {
+    "cv_acc": 0.6863,
+    "C": 0.005
   }
 }
