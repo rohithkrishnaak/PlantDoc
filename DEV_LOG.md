@@ -232,6 +232,13 @@
 
 ---
 
+### 5. Repository Clean-up (22 Oct)
+- Removed superseded artefacts: the EfficientNet-B0 model (`train.py`, its 16 MB checkpoint and metrics) and the 2-backbone hybrid experiment checkpoint.
+- Also removed the dataset extract/download scripts (`src/prepare_dataset.py`, `src/download_plantwild.py`), the hackathon pitch deck, demo script, social posts and generated outputs.
+- Everything is still in git history. File names in the sections above are kept as a historical record.
+
+---
+
 ## 🚫 Rejected Approaches
 - **PlantVillage pre-training:** Rejected because lab-photo models learn clean backgrounds and fail on field noise (the exact trap PS 2.2 avoids).
 - **End-to-end fine-tuning on 541 images:** overfit (70% train vs 40% validation). Replaced by frozen feature fusion. *Revisited in 2d: with 1492 de-duplicated photos and grouped CV it beats frozen features (75.9% vs 73.3%) and is now the model.*
