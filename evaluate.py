@@ -1,7 +1,9 @@
 """Held-out evaluation for PlantDoc.
 
 Evaluates the full pipeline (quality gate -> model -> fuzzy trust engine) on
-data/test, which has been de-duplicated against data/train (src/dedup.py):
+data/test (PlantDoc), which has been de-duplicated against the training data
+(src/dedup.py, src/merge_plantwild.py), or with --test-dir data/test_plantwild on
+the held-out PlantWild split:
 - Top-1 / top-3 accuracy with 95% bootstrap confidence intervals
 - Per-class precision / recall / F1 on ALL test photos, plus a confusion matrix
 - Quality-gate pass rate, trusted rate and accuracy on trusted photos
@@ -44,32 +46,48 @@ def bootstrap_ci(values: np.ndarray, n: int = 5000, seed: int = 0) -> list[float
     return [float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))]
 
 
+def output_paths(test_dir: Path) -> tuple[Path, Path, Path, Path]:
+    """Report, coverage plot, confusion matrix, predictions CSV; suffixed for non-default test sets."""
+    if test_dir == TEST_DIR:
+        return OUTPUT_REPORT, OUTPUT_PLOT, OUTPUT_CM, OUTPUT_CSV
+    sfx = "_" + test_dir.name.removeprefix("test_")
+    return (OUTPUT_REPORT.with_stem(OUTPUT_REPORT.stem + sfx), OUTPUT_PLOT.with_stem(OUTPUT_PLOT.stem + sfx),
+            OUTPUT_CM.with_stem(OUTPUT_CM.stem + sfx), OUTPUT_CSV.with_stem(OUTPUT_CSV.stem + sfx))
+
+
 def run_evaluation(
     use_mlflow: bool = True,
     experiment_name: str | None = None,
     run_name: str = "held-out-evaluation",
+    test_dir: Path = TEST_DIR,
+    weights: str | None = None,
 ):
-    print("=== PlantDoc Held-Out Evaluation ===")
-    model = PlantDocModel()
+    test_dir = Path(test_dir)
+    out_report, out_plot, out_cm, out_csv = output_paths(test_dir)
+    print(f"=== PlantDoc Held-Out Evaluation ({test_dir}) ===")
+    model = PlantDocModel(checkpoint=weights)
     threshold = model.trust_threshold
     print(f"Model: {model.weights_source} | trust threshold {threshold:.2f}")
     if model.is_demo:
         print("Warning: Model is in demo mode! Results will reflect untrained weights.")
 
-    test_dataset = datasets.ImageFolder(str(TEST_DIR))
+    test_dataset = datasets.ImageFolder(str(test_dir))
     print(f"Evaluating on {len(test_dataset)} held-out test samples across {len(CLASSES)} classes.")
 
     with mlfu.mlflow_run(
         run_name=run_name,
         experiment_name=experiment_name,
         enabled=use_mlflow,
-        tags={"eval_type": "held_out_test", "model_source": str(model.weights_source)},
+        tags={"eval_type": "held_out_test", "model_source": str(model.weights_source),
+              "test_set": test_dir.name, "stage": "evaluate"},
     ):
         mlfu.log_params({
             "model_source": str(model.weights_source),
             "is_demo": model.is_demo,
             "trust_threshold": threshold,
             "total_test_samples": len(test_dataset),
+            "test_dir": test_dir.as_posix(),
+            "weights_path": weights or "HYBRID_WEIGHTS default",
         })
 
         results = []
@@ -130,9 +148,9 @@ def run_evaluation(
         fig, ax = plt.subplots(figsize=(8, 7))
         ConfusionMatrixDisplay(cm, display_labels=[c.replace(" ", "\n", 1) for c in CLASSES]).plot(
             ax=ax, cmap="Greens", colorbar=False)
-        ax.set_title(f"Confusion matrix, all {total} de-duplicated test photos", fontweight="bold")
+        ax.set_title(f"Confusion matrix, all {total} photos in {test_dir.name}", fontweight="bold")
         plt.tight_layout()
-        plt.savefig(OUTPUT_CM, dpi=200)
+        plt.savefig(out_cm, dpi=200)
         plt.close()
 
         # Coverage curve: sweep the trust threshold
@@ -159,11 +177,11 @@ def run_evaluation(
         plt.grid(True, linestyle=":", alpha=0.6)
         plt.legend(loc="lower left", fontsize=9)
         plt.tight_layout()
-        plt.savefig(OUTPUT_PLOT, dpi=200)
+        plt.savefig(out_plot, dpi=200)
         plt.close()
 
-        OUTPUT_CSV.parent.mkdir(exist_ok=True)
-        with open(OUTPUT_CSV, "w", newline="") as f:
+        out_csv.parent.mkdir(exist_ok=True)
+        with open(out_csv, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(results[0]))
             w.writeheader()
             w.writerows(results)
@@ -174,6 +192,7 @@ def run_evaluation(
 
         report = {
             "model": model.weights_source,
+            "test_dir": test_dir.as_posix(),
             "trust_threshold": threshold,
             "overall": {
                 "total_test_samples": total,
@@ -193,8 +212,8 @@ def run_evaluation(
             "per_class_report_trusted": per_class_trusted,
             "confusion_matrix": {"labels": CLASSES, "matrix": cm.tolist()},
         }
-        OUTPUT_REPORT.write_text(json.dumps(report, indent=2))
-        print(f"Saved {OUTPUT_REPORT}, {OUTPUT_PLOT}, {OUTPUT_CM}, {OUTPUT_CSV}")
+        out_report.write_text(json.dumps(report, indent=2))
+        print(f"Saved {out_report}, {out_plot}, {out_cm}, {out_csv}")
 
         # Log metrics to MLflow
         ml_metrics = {
@@ -222,10 +241,10 @@ def run_evaluation(
                 ml_metrics[f"{safe_name}_f1"] = per_class[cls_name]["f1-score"]
 
         mlfu.log_metrics(ml_metrics)
-        mlfu.log_artifact(OUTPUT_REPORT, artifact_path="evaluation")
-        mlfu.log_artifact(OUTPUT_PLOT, artifact_path="figures")
-        mlfu.log_artifact(OUTPUT_CM, artifact_path="figures")
-        mlfu.log_artifact(OUTPUT_CSV, artifact_path="predictions")
+        mlfu.log_artifact(out_report, artifact_path="evaluation")
+        mlfu.log_artifact(out_plot, artifact_path="figures")
+        mlfu.log_artifact(out_cm, artifact_path="figures")
+        mlfu.log_artifact(out_csv, artifact_path="predictions")
 
         return report
 
@@ -234,6 +253,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Held-out evaluation for PlantDoc")
     parser.add_argument("--no-mlflow", action="store_true", help="Disable MLflow tracking")
     parser.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name override")
-    parser.add_argument("--run-name", type=str, default="held-out-evaluation", help="MLflow run name")
+    parser.add_argument("--run-name", type=str, default=None, help="MLflow run name")
+    parser.add_argument("--test-dir", type=Path, default=TEST_DIR,
+                        help="data/test (PlantDoc, default) or data/test_plantwild")
+    parser.add_argument("--weights", default=None,
+                        help="checkpoint to evaluate (default: HYBRID_WEIGHTS, i.e. the app's model)")
     args = parser.parse_args()
-    run_evaluation(use_mlflow=not args.no_mlflow, experiment_name=args.experiment_name, run_name=args.run_name)
+    run_evaluation(use_mlflow=not args.no_mlflow, experiment_name=args.experiment_name,
+                   run_name=args.run_name or f"held-out-evaluation-{args.test_dir.name}", test_dir=args.test_dir,
+                   weights=args.weights)
