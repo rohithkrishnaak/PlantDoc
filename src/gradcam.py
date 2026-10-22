@@ -20,7 +20,6 @@ class GradCAM:
         self.target_layer = target_layer or self._find_target_layer()
         self.gradients = None
         self.activations = None
-        self._register_hooks()
 
     def _find_target_layer(self) -> torch.nn.Module:
         """Find the final convolutional layer of the backbone."""
@@ -41,10 +40,20 @@ class GradCAM:
         def backward_hook(module, grad_in, grad_out):
             self.gradients = grad_out[0]
 
-        self.target_layer.register_forward_hook(forward_hook)
-        self.target_layer.register_full_backward_hook(backward_hook)
+        return [self.target_layer.register_forward_hook(forward_hook),
+                self.target_layer.register_full_backward_hook(backward_hook)]
 
     def generate(self, image: Image.Image, target_class_idx: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+        """Hooks live only for this call: the model is shared (cached) across app
+        sessions, and hooks left behind would pile up on every request."""
+        handles = self._register_hooks()
+        try:
+            return self._generate(image, target_class_idx)
+        finally:
+            for h in handles:
+                h.remove()
+
+    def _generate(self, image: Image.Image, target_class_idx: int | None = None) -> tuple[np.ndarray, np.ndarray]:
         """Generate Grad-CAM heatmap and overlaid visualization.
 
         Returns:

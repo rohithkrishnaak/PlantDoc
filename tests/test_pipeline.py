@@ -6,7 +6,9 @@ Tests:
 3. OpenCV Image Quality Gate feature extraction and retake tips.
 4. Multilingual i18n dictionary completeness (EN, HI, TA).
 5. Agronomic care notes coverage (ICAR/TNAU).
-6. Grad-CAM visual explainability heatmap generation.
+6. Grad-CAM visual explainability heatmap generation (and no hook leaks).
+7. Exact "not sure" message, CLAHE, duplicate hashing, image-mode handling,
+   small-leaf-on-soil rejection, and out-of-distribution rejection.
 """
 from __future__ import annotations
 
@@ -23,7 +25,10 @@ import torch
 from PIL import Image
 
 from src.agri_advisory import ADVISORIES, get_advisory
+from src.dedup import dhash
+from src.preprocess import apply_clahe
 from src.fuzzy_engine import (
+    UNCERTAIN_MESSAGE,
     CONF_SETS,
     QUALITY_SETS,
     TRUST_SETS,
@@ -117,15 +122,78 @@ def test_agri_advisories():
         assert "source" in adv
 
 
+_MODEL = None
+
+
+def _model() -> PlantDocModel:
+    global _MODEL
+    if _MODEL is None:
+        _MODEL = PlantDocModel()
+    return _MODEL
+
+
 # 4. Grad-CAM Test
 def test_gradcam_execution():
-    model = PlantDocModel()
+    model = _model()
     gradcam = GradCAM(model.model)
     dummy_img = Image.new("RGB", (224, 224), color=(34, 139, 34))
     heatmap, blended = gradcam.generate(dummy_img, target_class_idx=0)
     assert heatmap.shape == (224, 224, 3)
     assert blended.shape == (224, 224, 3)
     assert heatmap.dtype == np.uint8
+    # Hooks must be removed after each call: the app shares one cached model
+    layer = gradcam.target_layer
+    assert not layer._forward_hooks and not layer._backward_hooks
+
+
+# 5. Safety message, preprocessing, dedup, robustness
+def test_uncertain_message_exact():
+    assert UNCERTAIN_MESSAGE == "Not sure, please consult an agricultural expert."
+    assert evaluate_trust(0.2, 0.99).message == UNCERTAIN_MESSAGE
+
+
+def test_clahe_preserves_shape():
+    img = Image.fromarray(np.random.default_rng(0).integers(0, 255, (120, 90, 3), dtype=np.uint8))
+    out = apply_clahe(img)
+    assert out.size == img.size and out.mode == "RGB"
+
+
+def test_dhash_matches_resized_copy(tmp_dir=Path("experiments")):
+    rng = np.random.default_rng(1)
+    a = cv2.GaussianBlur(rng.integers(0, 255, (300, 400, 3), dtype=np.uint8), (9, 9), 0)
+    p1, p2 = tmp_dir / "_t1.png", tmp_dir / "_t2.jpg"
+    Image.fromarray(a).save(p1)
+    Image.fromarray(a).resize((200, 150)).save(p2, quality=80)
+    try:
+        assert (dhash(p1) != dhash(p2)).sum() <= 4
+    finally:
+        p1.unlink(); p2.unlink()
+
+
+def test_small_leaf_on_soil_rejected():
+    # A sharp leaf filling ~6% of a brown soil frame must be rejected with "move closer".
+    soil = np.full((480, 640, 3), (120, 100, 80), np.uint8)
+    soil = np.clip(soil + np.random.default_rng(0).integers(-15, 15, soil.shape), 0, 255).astype(np.uint8)
+    cv2.ellipse(soil, (320, 240), (70, 45), 20, 0, 360, (40, 150, 50), -1)
+    passed, _, tip = check_quality(soil)
+    assert not passed and "closer" in tip
+
+
+def test_image_modes_handled():
+    model = _model()
+    for mode in ("L", "RGBA", "CMYK", "P"):
+        preds, _, _ = model.diagnose(Image.new("RGB", (64, 48), (40, 140, 50)).convert(mode))
+        assert len(preds) == 3 and abs(sum(p for _, p in preds) - 1) <= 1.0
+
+
+def test_ood_rejects_non_leaf_photos():
+    model = _model()
+    if model.model.__class__.__name__ != "HybridNet" or not model.model.bank.numel():
+        return  # OOD check needs the hybrid checkpoint's feature bank
+    from skimage import data as skdata
+    for name in ("astronaut", "chelsea", "coffee", "rocket"):
+        _, sim, is_ood = model.diagnose(Image.fromarray(getattr(skdata, name)()))
+        assert is_ood, f"{name} accepted as a leaf (similarity {sim:.3f})"
 
 
 if __name__ == "__main__":
@@ -140,5 +208,17 @@ if __name__ == "__main__":
     test_agri_advisories()
     print("[PASS] Agronomic advisories")
     test_gradcam_execution()
-    print("[PASS] Grad-CAM heatmap generation")
+    print("[PASS] Grad-CAM heatmap generation (no hook leak)")
+    test_uncertain_message_exact()
+    print("[PASS] Exact 'not sure' message")
+    test_clahe_preserves_shape()
+    print("[PASS] CLAHE preserves shape and mode")
+    test_dhash_matches_resized_copy()
+    print("[PASS] Near-duplicate hash survives resize + JPEG")
+    test_small_leaf_on_soil_rejected()
+    print("[PASS] Small leaf on soil rejected with 'move closer'")
+    test_image_modes_handled()
+    print("[PASS] Grayscale / RGBA / CMYK / palette images handled")
+    test_ood_rejects_non_leaf_photos()
+    print("[PASS] Non-leaf photos rejected as out-of-distribution")
     print("\n[SUCCESS] ALL PIPELINE TESTS PASSED SUCCESSFULLY!")

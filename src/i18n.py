@@ -80,6 +80,24 @@ TRANSLATIONS = {
         "hi": "पत्ती बहुत छोटी है या नहीं दिखी: फोन को पत्ती के करीब ले जाएं ताकि वह फ्रेम भर ले।",
         "ta": "இலை மிகச் சிறியதாக உள்ளது: இலை திரையை நிரப்பும் வகையில் நெருக்கமாக எடுக்கவும்.",
     },
+    "ood_rejected": {
+        "en": "This does not look like a tomato or potato leaf this app was trained on. "
+              "Please photograph a single tomato or potato leaf.",
+        "hi": "यह उस टमाटर या आलू की पत्ती जैसी नहीं दिखती जिस पर यह ऐप प्रशिक्षित है। "
+              "कृपया टमाटर या आलू की एक पत्ती की तस्वीर लें।",
+        "ta": "இது இந்த செயலி பயிற்சி பெற்ற தக்காளி அல்லது உருளைக்கிழங்கு இலை போல் தெரியவில்லை. "
+              "தயவுசெய்து ஒரு தக்காளி அல்லது உருளைக்கிழங்கு இலையை புகைப்படம் எடுக்கவும்.",
+    },
+    "uncertain_reason": {
+        "en": "Trust score {trust:.2f} is below the threshold {threshold:.2f}: the photo quality was "
+              "borderline or the disease signs were ambiguous. A confident wrong diagnosis can lead "
+              "to the wrong pesticide.",
+        "hi": "भरोसा स्कोर {trust:.2f} सीमा {threshold:.2f} से कम है: तस्वीर की गुणवत्ता सीमांत थी या "
+              "रोग के लक्षण स्पष्ट नहीं थे। गलत निदान से गलत कीटनाशक का उपयोग हो सकता है।",
+        "ta": "நம்பக மதிப்பெண் {trust:.2f} வரம்பு {threshold:.2f}-க்கு கீழ் உள்ளது: புகைப்படத் தரம் "
+              "எல்லைக்குட்பட்டது அல்லது நோய் அறிகுறிகள் தெளிவாக இல்லை. தவறான கண்டறிதல் தவறான "
+              "பூச்சிக்கொல்லிக்கு வழிவகுக்கும்.",
+    },
     "tip_borderline": {
         "en": "Quality is borderline: retake closer, in even light, holding steady.",
         "hi": "गुणवत्ता सीमांत है: फोन स्थिर रखकर अच्छी रोशनी में दोबारा तस्वीर लें।",
