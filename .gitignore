@@ -15,3 +15,5 @@ mlartifacts/
 *.sqlite
 mlflow.db
 .trash/
+
+.claude/
