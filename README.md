@@ -3,10 +3,8 @@ title: PlantDoc Leaf Doctor
 emoji: 🌿
 colorFrom: green
 colorTo: blue
-sdk: streamlit
-sdk_version: 1.66.1
-python_version: "3.11"
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: false
 ---
 
@@ -16,8 +14,6 @@ pinned: false
 
 [![Live App](https://img.shields.io/badge/Live_App-HuggingFace_Spaces-green)](https://huggingface.co/spaces/rohithkrishnaak/PlantDoc)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-PlantDoc-blue)](https://github.com/rohithkrishnaak/PlantDoc)
-[![Presentation Deck](https://img.shields.io/badge/Pitch_Deck-PowerPoint_PPTX-orange)](./PlantDoc_Pitch_Deck.pptx)
-[![Demo Script](https://img.shields.io/badge/Demo-5_Min_Script-purple)](./DEMO_SCRIPT.md)
 [![MLflow Tracking](https://img.shields.io/badge/MLflow-Experiment_Tracking-0194E2?logo=mlflow&logoColor=white)](./MLFLOW_GUIDE.md)
 
 ---
@@ -57,7 +53,7 @@ Plant diseases destroy up to 40% of Indian farmers' harvest, with early detectio
 [Trusted diagnosis]  top-3 bars · Grad-CAM heatmap · ICAR/TNAU care note · EN / हिंदी / தமிழ்
 ```
 
-**Technology stack:** Python, PyTorch + `timm` (ConvNeXt-T, DINOv2 ViT-S/14), OpenCV, scikit-fuzzy, scikit-learn, MLflow, Streamlit, Hugging Face Spaces.
+**Technology stack:** Python, PyTorch + `timm` (ConvNeXt-T, DINOv2 ViT-S/14), OpenCV, scikit-fuzzy, scikit-learn, MLflow, FastAPI, Hugging Face Spaces.
 
 ---
 
@@ -146,8 +142,8 @@ pip install -r requirements.txt
 # 4. Copy environment configuration
 cp .env.example .env
 
-# 5. Run the Streamlit web application
-streamlit run app.py
+# 5. Run the web application (http://127.0.0.1:8000)
+uvicorn server:app --port 8000
 ```
 
 ### Automated Testing
@@ -189,7 +185,7 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 ## 🛠️ AI Tools & Dependencies
 * **AI coding assistant:** Claude Code (Anthropic) helped with scaffolding, experiments and documentation. All results were produced by the scripts in this repository and checked by the team.
 * **Pretrained models:** `convnext_tiny.fb_in22k_ft_in1k` and `vit_small_patch14_dinov2.lvd142m` via `timm` / Hugging Face Hub (ImageNet / LVD-142M pretraining; no PlantVillage).
-* **Libraries:** see [`requirements.txt`](./requirements.txt) (PyTorch, timm, OpenCV, scikit-fuzzy, scikit-learn, MLflow, Streamlit, Pillow, pillow-heif, NumPy, Matplotlib).
+* **Libraries:** see [`requirements.txt`](./requirements.txt) (PyTorch, timm, OpenCV, scikit-fuzzy, scikit-learn, MLflow, FastAPI, Pillow, pillow-heif, NumPy, Matplotlib).
 
 ---
 
@@ -201,14 +197,11 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 ## 📓 Development Log & Deliverables
 * **MLflow Tracking & Guide:** [MLFLOW_GUIDE.md](./MLFLOW_GUIDE.md)
 * **Technical Decisions & Experiments:** See [DEV_LOG.md](./DEV_LOG.md)
-* **PowerPoint Pitch Deck:** [PlantDoc_Pitch_Deck.pptx](./PlantDoc_Pitch_Deck.pptx)
-* **5-Minute Video Presentation Script:** [DEMO_SCRIPT.md](./DEMO_SCRIPT.md)
-* **Social Media Announcements (#NEXAI2026):** [SOCIAL_POSTS.md](./SOCIAL_POSTS.md)
 ---
 
 ## 🖥️ Web frontend (production UI)
 
-The production UI lives in `web/` (static HTML/CSS/JS, EN / हिन्दी / தமிழ், light + dark) and is served by a FastAPI backend (`server.py`) that wraps the same quality gate, hybrid model, fuzzy trust engine, Grad-CAM and ICAR/TNAU advisories as the Streamlit demo.
+The production UI lives in `web/` (static HTML/CSS/JS, EN / हिन्दी / தமிழ், light + dark) and is served by a FastAPI backend (`server.py`) that wraps the same quality gate, hybrid model, fuzzy trust engine, Grad-CAM and ICAR/TNAU advisories.
 
 ```bash
 pip install -r requirements.txt
