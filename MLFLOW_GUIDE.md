@@ -69,22 +69,7 @@ python train_hybrid.py --backbones convnext_tiny.fb_in22k_ft_in1k vit_base_patch
 
 ---
 
-### 3. Backbone Transfer Learning (`train.py`)
-Fine-tunes the single backbone classifier (warmup + fine-tuning):
-```bash
-python train.py
-```
-**Logged to MLflow:**
-- **Parameters:** Backbone architecture, batch size, learning rates, epochs (warmup & finetune), loss weights.
-- **Step-by-step Metrics:** Training loss, training accuracy, validation loss, validation accuracy, validation top-3 per epoch.
-- **Artifacts:**
-  - `checkpoints/plantdoc_effnet_b0.pth`
-  - `metrics/training_metrics.json`
-  - `training_history.json`
-
----
-
-### 4. Backbone Benchmarking (`experiments/benchmark_backbones.py`)
+### 3. Backbone Benchmarking (`experiments/benchmark_backbones.py`)
 Evaluates candidate backbones and feature fusion pairs with grouped 5-fold CV:
 ```bash
 python -m experiments.benchmark_backbones
@@ -96,7 +81,7 @@ python -m experiments.benchmark_backbones
 
 ---
 
-### 5. PlantWild Merge, Fine-Tuning, Registry & Leaderboard
+### 4. PlantWild Merge, Fine-Tuning, Registry & Leaderboard
 ```bash
 python -m src.merge_plantwild                       # run "data-merge-plantwild": leak-check metrics + manifest
 python train_finetune.py --epochs 20                # parent run + nested run per CV fold (per-epoch curves)

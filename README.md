@@ -160,9 +160,12 @@ python tests/test_web.py
 ```
 
 ### Reproducing the results
+Place the 6 PlantDoc classes in `data/train` and `data/test` (one folder per class), and the PlantWild
+tomato/potato folders in `data/plantwild/images` and `data/plantwild_v2` (https://tqwei05.github.io/PlantWild/).
 ```bash
-python src/prepare_dataset.py                 # extract the 6 classes from PlantDoc into data/
 python -m src.dedup --move                    # remove train/test duplicates and label conflicts
+python -m src.merge_plantwild                 # leakage-safe merge -> data/train_merged, data/test_plantwild
+python train_finetune.py --epochs 20          # current model -> weights/plantdoc_finetuned.pth
 python -m experiments.benchmark_backbones     # backbone + CLAHE + hybrid search (grouped CV)
 python train_hybrid.py --backbones convnext_tiny.fb_in22k_ft_in1k vit_small_patch14_dinov2.lvd142m --clahe --C 0.005
 python evaluate.py                            # held-out metrics, coverage curve, confusion matrix

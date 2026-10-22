@@ -46,8 +46,6 @@
 | `src/gradcam.py` | Grad-CAM saliency map (hooks the ConvNeXt branch of the hybrid, or EfficientNet `conv_head`) (Stretch Goal 1) |
 | `src/i18n.py` | Multilingual localization dictionary for English, Hindi, and Tamil (Stretch Goal 2) |
 | `src/agri_advisory.py` | Expert agronomic care notes cited from ICAR and TNAU (Stretch Goal 3) |
-| `src/prepare_dataset.py` | PlantDoc bare git object stream extractor with Windows NTFS filename sanitization |
-| `train.py` | 2-phase transfer learning fine-tuning with cosine decay and class balancing |
 | `evaluate.py` | Held-out test evaluation, confusion matrix, and coverage curve plotter |
 | `server.py` | FastAPI app: `/api/diagnose` (quality gate → model → trust → plan), `/api/advisor`, accounts, history; serves `web/` |
 | `web/` | Static front end (HTML/CSS/JS): login, diagnose, expert advisor, history, profile; EN / HI / TA, light / dark |
@@ -227,6 +225,10 @@
 - **Accounts (`src/accounts.py`).** Optional; guests can diagnose and use the advisor. scrypt password hashes, random session tokens stored only as SHA-256, `HttpOnly` + `SameSite=Lax` cookie, a required `X-Requested-With` header on every write, login throttling (8 attempts / 5 min), password change signs out other devices, and deleting an account deletes its history. SQLite file at `DB_PATH` (default `data/plantdoc.db`, git-ignored; mount a volume to keep it across container restarts).
 - **History:** a 200 px thumbnail, the top-3 and the inputs are stored (last 100 per user). The plan is rebuilt from those inputs when opened, so it appears in the current language.
 - **Limits:** the photo-based severity is a rough lesion-area proxy and is labelled "estimated from photo"; the dose table covers the 6 classes only; the plan is decision support, not a replacement for the product label or a local agronomist.
+
+### 6. Repository Clean-up (22 Oct)
+- Removed superseded or one-off files: the EfficientNet-B0 trainer (`train.py`) and its metrics, the dataset extract/download scripts (`src/prepare_dataset.py`, `src/download_plantwild.py`), and regenerable outputs (`experiments/mlflow_leaderboard.csv`, `experiments/duplicates_check.json`, now git-ignored). The old checkpoints, Streamlit app and hackathon deck/docs were already removed on main.
+- Everything is still in git history. File names in the sections above are kept as a historical record.
 
 ---
 
