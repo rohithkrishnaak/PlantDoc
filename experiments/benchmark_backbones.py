@@ -24,6 +24,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from torchvision import datasets, transforms
 
+from src import mlflow_utils as mlfu
 from src.dedup import train_groups
 from src.preprocess import apply_clahe
 
@@ -113,31 +114,45 @@ def main():
     results, feats = {}, {}
     groups = groups_for("data/train")
     Cs = (0.005, 0.02, 0.05, 0.2)
-    for name in names:
-        for clahe in (False, True):
-            x, y = extract(name, "data/train", clahe)
-            feats[(name, clahe)] = l2(x)
-            best = max((cv_score(feats[(name, clahe)], y, C, groups=groups), C) for C in Cs)
-            key = f"{name} | {'CLAHE' if clahe else 'raw'}"
-            results[key] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
-            print(f"{key:60s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)
 
-    # Fusion: concatenate L2-normalised features of the best single configs
-    singles = sorted(feats, key=lambda k: -results[f"{k[0]} | {'CLAHE' if k[1] else 'raw'}"]["cv_acc"])
-    top = []
-    for k in singles:  # best CLAHE setting per backbone
-        if k[0] not in [t[0] for t in top]:
-            top.append(k)
-    top = top[:4]
-    for r in (2, 3):
-        for combo in itertools.combinations(top, r):
-            x = np.concatenate([feats[k] for k in combo], axis=-1)
-            best = max((cv_score(x, y, C, groups=groups), C) for C in Cs)
-            key = " + ".join(f"{k[0].split('.')[0]}{'(C)' if k[1] else ''}" for k in combo)
-            results[f"HYBRID {key}"] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
-            print(f"HYBRID {key:53s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)
+    with mlfu.mlflow_run(
+        run_name="backbone-benchmarks",
+        tags={"experiment": "backbone_exploration"},
+    ):
+        for name in names:
+            for clahe in (False, True):
+                x, y = extract(name, "data/train", clahe)
+                feats[(name, clahe)] = l2(x)
+                best = max((cv_score(feats[(name, clahe)], y, C, groups=groups), C) for C in Cs)
+                key = f"{name} | {'CLAHE' if clahe else 'raw'}"
+                results[key] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
+                print(f"{key:60s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)
+                with mlfu.mlflow_run(run_name=key, nested=True):
+                    mlfu.log_params({"backbone": name, "clahe": clahe, "C": best[1]})
+                    mlfu.log_metric("cv_acc", float(best[0]))
 
-    Path("experiments/benchmark_results.json").write_text(json.dumps(results, indent=2))
+        # Fusion: concatenate L2-normalised features of the best single configs
+        singles = sorted(feats, key=lambda k: -results[f"{k[0]} | {'CLAHE' if k[1] else 'raw'}"]["cv_acc"])
+        top = []
+        for k in singles:  # best CLAHE setting per backbone
+            if k[0] not in [t[0] for t in top]:
+                top.append(k)
+        top = top[:4]
+        for r in (2, 3):
+            for combo in itertools.combinations(top, r):
+                x = np.concatenate([feats[k] for k in combo], axis=-1)
+                best = max((cv_score(x, y, C, groups=groups), C) for C in Cs)
+                key = " + ".join(f"{k[0].split('.')[0]}{'(C)' if k[1] else ''}" for k in combo)
+                results[f"HYBRID {key}"] = {"cv_acc": round(float(best[0]), 4), "C": best[1]}
+                print(f"HYBRID {key:53s} CV acc {best[0]:.3f} (C={best[1]})", flush=True)
+                with mlfu.mlflow_run(run_name=f"HYBRID {key}", nested=True):
+                    mlfu.log_params({"type": "hybrid", "combo": key, "C": best[1]})
+                    mlfu.log_metric("cv_acc", float(best[0]))
+
+        out_path = Path("experiments/benchmark_results.json")
+        out_path.write_text(json.dumps(results, indent=2))
+        mlfu.log_artifact(out_path, artifact_path="benchmarks")
+        mlfu.log_dict(results, "benchmark_results.json")
 
 
 if __name__ == "__main__":
