@@ -16,8 +16,6 @@ pinned: false
 
 [![Live App](https://img.shields.io/badge/Live_App-HuggingFace_Spaces-green)](https://huggingface.co/spaces/rohithkrishnaak/PlantDoc)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-PlantDoc-blue)](https://github.com/rohithkrishnaak/PlantDoc)
-[![Presentation Deck](https://img.shields.io/badge/Pitch_Deck-PowerPoint_PPTX-orange)](./PlantDoc_Pitch_Deck.pptx)
-[![Demo Script](https://img.shields.io/badge/Demo-5_Min_Script-purple)](./DEMO_SCRIPT.md)
 [![MLflow Tracking](https://img.shields.io/badge/MLflow-Experiment_Tracking-0194E2?logo=mlflow&logoColor=white)](./MLFLOW_GUIDE.md)
 
 ---
@@ -158,7 +156,6 @@ python tests/test_pipeline.py
 
 ### Reproducing the results
 ```bash
-python src/prepare_dataset.py                 # extract the 6 classes from PlantDoc into data/
 python -m src.dedup --move                    # remove train/test duplicates and label conflicts
 python -m experiments.benchmark_backbones     # backbone + CLAHE + hybrid search (grouped CV)
 python train_hybrid.py --backbones convnext_tiny.fb_in22k_ft_in1k vit_small_patch14_dinov2.lvd142m --clahe --C 0.005
@@ -201,6 +198,3 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 ## 📓 Development Log & Deliverables
 * **MLflow Tracking & Guide:** [MLFLOW_GUIDE.md](./MLFLOW_GUIDE.md)
 * **Technical Decisions & Experiments:** See [DEV_LOG.md](./DEV_LOG.md)
-* **PowerPoint Pitch Deck:** [PlantDoc_Pitch_Deck.pptx](./PlantDoc_Pitch_Deck.pptx)
-* **5-Minute Video Presentation Script:** [DEMO_SCRIPT.md](./DEMO_SCRIPT.md)
-* **Social Media Announcements (#NEXAI2026):** [SOCIAL_POSTS.md](./SOCIAL_POSTS.md)

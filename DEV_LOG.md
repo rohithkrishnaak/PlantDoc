@@ -45,11 +45,8 @@
 | `src/gradcam.py` | Grad-CAM saliency map (hooks the ConvNeXt branch of the hybrid, or EfficientNet `conv_head`) (Stretch Goal 1) |
 | `src/i18n.py` | Multilingual localization dictionary for English, Hindi, and Tamil (Stretch Goal 2) |
 | `src/agri_advisory.py` | Expert agronomic care notes cited from ICAR and TNAU (Stretch Goal 3) |
-| `src/prepare_dataset.py` | PlantDoc bare git object stream extractor with Windows NTFS filename sanitization |
-| `train.py` | 2-phase transfer learning fine-tuning with cosine decay and class balancing |
 | `evaluate.py` | Held-out test evaluation, confusion matrix, and coverage curve plotter |
 | `app.py` | Streamlit mobile-first UI with camera input, language toggle, and explainability tabs |
-| `generate_pitch_deck.py` | Automated 7-slide PowerPoint presentation deck (`PlantDoc_Pitch_Deck.pptx`) |
 
 ---
 
@@ -208,6 +205,13 @@
 1. **Grad-CAM Saliency Maps (`src/gradcam.py`):** Visual explainability hooked to the ConvNeXt branch of the hybrid (labelled as such in the UI). Shows farmers that the model inspects actual necrotic lesions rather than soil or fingers.
 2. **Multilingual Localization (`src/i18n.py`):** UI strings, retake advice, and disease terminology fully translated into Hindi (हिन्दी) and Tamil (தமிழ்).
 3. **Agronomic Care Notes (`src/agri_advisory.py`):** Curated cultural and chemical disease management advice cited directly from ICAR-CPRI, ICAR-IIHR, and TNAU Agritech portals.
+
+---
+
+### 5. Repository Clean-up (22 Oct)
+- Removed superseded artefacts: the EfficientNet-B0 model (`train.py`, its 16 MB checkpoint and metrics) and the 2-backbone hybrid experiment checkpoint.
+- Also removed the dataset extract/download scripts (`src/prepare_dataset.py`, `src/download_plantwild.py`), the hackathon pitch deck, demo script, social posts and generated outputs.
+- Everything is still in git history. File names in the sections above are kept as a historical record.
 
 ---
 
