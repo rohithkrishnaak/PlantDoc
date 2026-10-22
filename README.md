@@ -3,10 +3,8 @@ title: PlantDoc Leaf Doctor
 emoji: 🌿
 colorFrom: green
 colorTo: blue
-sdk: streamlit
-sdk_version: 1.66.1
-python_version: "3.11"
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: false
 ---
 
@@ -34,6 +32,7 @@ Plant diseases destroy up to 40% of Indian farmers' harvest, with early detectio
 5. **Grad-CAM Explainability (Stretch Goal 1)**: a heatmap of the leaf regions that drove the prediction (from the ConvNeXt branch).
 6. **Multilingual Interface (Stretch Goal 2)**: English, Hindi (हिन्दी) and Tamil (தமிழ்).
 7. **ICAR / TNAU Care Notes (Stretch Goal 3)**: organic and chemical management advice cited from agricultural extension sources.
+8. **Expert Advisor and accounts**: a rule-based action plan (urgency, doses scaled to your acres, spray calendar, prevention, safety, expert escalation) that updates with field conditions, plus optional sign-in with profile and diagnosis history.
 
 ---
 
@@ -53,9 +52,11 @@ Plant diseases destroy up to 40% of Indian farmers' harvest, with early detectio
          ├── trust < 0.61 ──► ⚠️ "Not sure, please consult an agricultural expert."
          ▼
 [Trusted diagnosis]  top-3 bars · Grad-CAM heatmap · ICAR/TNAU care note · EN / हिंदी / தமிழ்
+         ▼
+[Expert Advisor]  urgency · doses for your acres · spray calendar · safety · KVK escalation
 ```
 
-**Technology stack:** Python, PyTorch + `timm` (ConvNeXt-T, DINOv2 ViT-S/14), OpenCV, scikit-fuzzy, scikit-learn, MLflow, Streamlit, Hugging Face Spaces.
+**Technology stack:** Python, PyTorch + `timm` (ConvNeXt-T, DINOv2 ViT-S/14), OpenCV, scikit-fuzzy, scikit-learn, MLflow, FastAPI, Hugging Face Spaces.
 
 ---
 
@@ -116,7 +117,7 @@ PlantDoc is scraped from the internet, so copies repeat. `src/dedup.py` (MD5 plu
 - The app gives a diagnosis for about 4 in 10 photos and says "not sure" for the rest. This is a deliberate safety trade-off.
 - Grad-CAM shows only the ConvNeXt branch, not the whole hybrid.
 - Backbone weights download from the Hugging Face Hub on first start.
-- The Hindi and Tamil text should be reviewed by a native speaker.
+- The Hindi and Tamil text, including the expert-advisor plans, should be reviewed by a native speaker.
 
 ---
 
@@ -144,8 +145,8 @@ pip install -r requirements.txt
 # 4. Copy environment configuration
 cp .env.example .env
 
-# 5. Run the Streamlit web application
-streamlit run app.py
+# 5. Run the web application (http://127.0.0.1:8000)
+uvicorn server:app --port 8000
 ```
 
 ### Automated Testing
@@ -153,10 +154,18 @@ Run the pipeline test suite (quality gate, fuzzy engine, i18n, advisories, Grad-
 ```bash
 python tests/test_pipeline.py
 ```
+Run the web back-end tests (expert system, accounts, history; no model needed):
+```bash
+python tests/test_web.py
+```
 
 ### Reproducing the results
+Place the 6 PlantDoc classes in `data/train` and `data/test` (one folder per class), and the PlantWild
+tomato/potato folders in `data/plantwild/images` and `data/plantwild_v2` (https://tqwei05.github.io/PlantWild/).
 ```bash
 python -m src.dedup --move                    # remove train/test duplicates and label conflicts
+python -m src.merge_plantwild                 # leakage-safe merge -> data/train_merged, data/test_plantwild
+python train_finetune.py --epochs 20          # current model -> weights/plantdoc_finetuned.pth
 python -m experiments.benchmark_backbones     # backbone + CLAHE + hybrid search (grouped CV)
 python train_hybrid.py --backbones convnext_tiny.fb_in22k_ft_in1k vit_small_patch14_dinov2.lvd142m --clahe --C 0.005
 python evaluate.py                            # held-out metrics, coverage curve, confusion matrix
@@ -172,6 +181,7 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 | **🔬 Grad-CAM Heatmaps** | Generates class activation maps over the leaf to highlight lesions | ✅ Completed |
 | **🌐 Multilingual UI** | Toggle English, Hindi (हिन्दी), and Tamil (தமிழ்) | ✅ Completed |
 | **🌾 Extension Care Notes** | ICAR/TNAU-cited organic & chemical management advice | ✅ Completed |
+| **🧑‍🌾 Expert Advisor** | Rule-based action plan with doses for your acres, spray calendar and expert escalation | ✅ Completed |
 
 ---
 
@@ -186,7 +196,7 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 ## 🛠️ AI Tools & Dependencies
 * **AI coding assistant:** Claude Code (Anthropic) helped with scaffolding, experiments and documentation. All results were produced by the scripts in this repository and checked by the team.
 * **Pretrained models:** `convnext_tiny.fb_in22k_ft_in1k` and `vit_small_patch14_dinov2.lvd142m` via `timm` / Hugging Face Hub (ImageNet / LVD-142M pretraining; no PlantVillage).
-* **Libraries:** see [`requirements.txt`](./requirements.txt) (PyTorch, timm, OpenCV, scikit-fuzzy, scikit-learn, MLflow, Streamlit, Pillow, pillow-heif, NumPy, Matplotlib).
+* **Libraries:** see [`requirements.txt`](./requirements.txt) (PyTorch, timm, OpenCV, scikit-fuzzy, scikit-learn, MLflow, FastAPI, Pillow, pillow-heif, NumPy, Matplotlib).
 
 ---
 
@@ -198,3 +208,22 @@ python -m experiments.quality_gate_eval       # quality gate on real and degrade
 ## 📓 Development Log & Deliverables
 * **MLflow Tracking & Guide:** [MLFLOW_GUIDE.md](./MLFLOW_GUIDE.md)
 * **Technical Decisions & Experiments:** See [DEV_LOG.md](./DEV_LOG.md)
+---
+
+## 🖥️ Web Application
+
+`server.py` (FastAPI) serves the static front end in `web/` and the API. The front end has five screens: sign in / create account / guest, **Diagnose**, **Expert advisor** (a plan without a photo), **History**, and **Profile** (farm, language, theme, password). It is mobile-first, supports EN / हिन्दी / தமிழ், and has light and dark themes.
+
+```bash
+uvicorn server:app --port 8000                  # http://127.0.0.1:8000 (first start loads the model, ~30 s)
+docker build -t plantdoc . && docker run -p 7860:7860 plantdoc
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/diagnose` | multipart `file`, `lang`, optional `context` → `status` (`REJECTED_QUALITY`, `REJECTED_OOD`, `UNCERTAIN`, `TRUSTED`), predictions, Grad-CAM, `plan` |
+| `POST /api/advisor` | disease + field conditions → `plan` (no photo) |
+| `GET /api/health` | loaded weights and trust threshold |
+| `/api/auth/*`, `PATCH /api/profile`, `/api/history` | accounts, profile, diagnosis history |
+
+Accounts are stored in SQLite at `DB_PATH` (default `data/plantdoc.db`). On Hugging Face Spaces or Docker, mount persistent storage there or accounts reset on restart.

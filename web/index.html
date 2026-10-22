@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PlantDoc Leaf Doctor · Honest AI for Indian farmers</title>
+<meta name="description" content="Leaf Doctor diagnoses tomato and potato leaf disease from real field photos, builds an expert action plan, and says &quot;I don't know&quot; instead of guessing.">
+<meta name="theme-color" content="#f3faf4">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19c0-9 5-14 14-14 0 9-5 14-14 14z"/><path d="M5 19c3-5 6-8 10-10"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></symbol>
+    <symbol id="i-advisor" viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L19 9.5l-4.1 3.2L16 18l-4-2.7L8 18l1.1-5.3L5 9.5l5.1-1.9z"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============ AUTH ============ -->
+<section id="view-login" class="auth" hidden>
+  <aside class="auth-pitch">
+    <a class="brand brand-light" href="#/login"><span class="logo"><svg class="ic"><use href="#i-leaf"/></svg></span><span><strong>Leaf Doctor</strong><small data-i18n="brand_sub"></small></span></a>
+    <div>
+      <h1 data-i18n="pitch_h"></h1>
+      <ul class="pitch-list">
+        <li><svg class="ic"><use href="#i-check"/></svg><span data-i18n="pitch_1"></span></li>
+        <li><svg class="ic"><use href="#i-check"/></svg><span data-i18n="pitch_2"></span></li>
+        <li><svg class="ic"><use href="#i-check"/></svg><span data-i18n="pitch_3"></span></li>
+      </ul>
+    </div>
+    <small class="pitch-foot">NexAI 2026 Hackathon</small>
+  </aside>
+
+  <div class="auth-panel">
+    <div class="auth-top"><div class="seg lang-seg" role="group" aria-label="Language">
+      <button data-lang="en">EN</button><button data-lang="hi">हिं</button><button data-lang="ta">த</button></div></div>
+    <form id="authForm" class="auth-card" novalidate>
+      <div class="seg tabs" role="tablist">
+        <button type="button" role="tab" data-mode="in" data-i18n="tab_in"></button>
+        <button type="button" role="tab" data-mode="up" data-i18n="tab_up"></button>
+      </div>
+      <h2 id="authTitle"></h2>
+      <p class="muted" id="authDesc"></p>
+      <label class="field up-only"><span data-i18n="f_name"></span><input id="aName" autocomplete="name" maxlength="80"></label>
+      <label class="field"><span data-i18n="f_email"></span><input id="aEmail" type="email" autocomplete="email" inputmode="email" required></label>
+      <label class="field"><span data-i18n="f_password"></span>
+        <span class="pw"><input id="aPass" type="password" autocomplete="current-password" required minlength="8"><button type="button" class="link" id="pwToggle" data-i18n="show"></button></span>
+        <small class="muted up-only" data-i18n="pw_hint"></small></label>
+      <p class="form-err" id="authErr" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" id="authSubmit" type="submit"></button>
+      <div class="divider"><span data-i18n="or"></span></div>
+      <button class="btn btn-ghost btn-block" id="guestBtn" type="button" data-i18n="btn_guest"></button>
+      <p class="muted small center" data-i18n="guest_note"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ APP SHELL ============ -->
+<div id="shell" hidden>
+  <header class="nav">
+    <div class="nav-in">
+      <a class="brand" href="#/" aria-label="Leaf Doctor"><span class="logo"><svg class="ic"><use href="#i-leaf"/></svg></span><span class="brand-t"><strong>Leaf Doctor</strong><small data-i18n="brand_sub"></small></span></a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="#/" data-route="diagnose"><svg class="ic"><use href="#i-camera"/></svg><span data-i18n="nav_diagnose"></span></a>
+        <a href="#/advisor" data-route="advisor"><svg class="ic"><use href="#i-advisor"/></svg><span data-i18n="nav_advisor"></span></a>
+        <a href="#/history" data-route="history"><svg class="ic"><use href="#i-history"/></svg><span data-i18n="nav_history"></span></a>
+      </nav>
+      <div class="nav-right">
+        <div class="seg lang-seg" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="hi">हिं</button><button data-lang="ta">த</button></div>
+        <a class="avatar-btn" id="userBtn" href="#/profile" aria-label="Profile"><span class="avatar" id="avatar">?</span><span class="who hide-sm" id="whoName"></span></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- DIAGNOSE -->
+    <section id="view-diagnose" class="view" hidden>
+      <div class="page-head">
+        <p class="hello" id="hello" hidden></p>
+        <h1 data-i18n="dx_title"></h1>
+        <p class="muted lead" data-i18n="dx_sub"></p>
+      </div>
+      <div class="grid">
+        <article class="card scan">
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload leaf photo">
+            <div class="drop-empty" id="dropEmpty">
+              <span class="drop-ic"><svg class="ic"><use href="#i-leaf"/></svg></span>
+              <h2 data-i18n="drop_title"></h2>
+              <p data-i18n="drop_sub"></p>
+            </div>
+            <div class="drop-preview" id="dropPreview" hidden>
+              <img id="previewImg" alt="">
+              <div class="scanline" id="scanline" hidden></div>
+              <span class="tag" id="previewTag" hidden></span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btnCamera"><svg class="ic"><use href="#i-camera"/></svg><span data-i18n="btn_camera"></span></button>
+            <button class="btn btn-ghost" id="btnUpload"><svg class="ic"><use href="#i-upload"/></svg><span data-i18n="btn_upload"></span></button>
+          </div>
+          <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+          <input type="file" id="fileUpload" accept="image/*,.heic,.heif" hidden>
+          <details class="tips"><summary data-i18n="tips_t"></summary>
+            <ul><li data-i18n="tip_1"></li><li data-i18n="tip_2"></li><li data-i18n="tip_3"></li></ul></details>
+        </article>
+
+        <article class="card result" id="result" aria-live="polite">
+          <header class="card-head"><h3 data-i18n="res_title"></h3><span class="pill" id="resBadge" hidden></span></header>
+          <div class="empty" id="resEmpty">
+            <span class="empty-ic"><svg class="ic"><use href="#i-shield"/></svg></span>
+            <b data-i18n="empty_t"></b>
+            <p class="muted" data-i18n="empty_d"></p>
+          </div>
+          <ol class="steps" id="steps" hidden>
+            <li data-step="quality"><i></i><span data-i18n="step_quality"></span></li>
+            <li data-step="model"><i></i><span data-i18n="step_model"></span></li>
+            <li data-step="trust"><i></i><span data-i18n="step_trust"></span></li>
+          </ol>
+          <div id="resBody" hidden>
+            <div class="verdict" id="verdict"></div>
+            <div id="predBlock">
+              <div class="cols-label"><span data-i18n="top3"></span><span data-i18n="confidence"></span></div>
+              <ul class="preds" id="preds"></ul>
+              <div class="meters">
+                <div class="meter"><span data-i18n="m_quality"></span><b id="mQuality"></b><div class="bar"><i id="mQualityBar"></i></div></div>
+                <div class="meter"><span data-i18n="m_trust"></span><b id="mTrust"></b><div class="bar"><i id="mTrustBar"></i></div></div>
+              </div>
+            </div>
+            <details class="cam" id="camBlock" hidden open>
+              <summary data-i18n="cam_title"></summary>
+              <p class="muted small" data-i18n="cam_cap"></p>
+              <div class="compare">
+                <figure><img id="camOrig" alt=""><figcaption data-i18n="orig"></figcaption></figure>
+                <figure><img id="camMap" alt=""><figcaption data-i18n="heat"></figcaption></figure>
+              </div>
+            </details>
+          </div>
+        </article>
+      </div>
+      <div id="dxPlan" class="plan-slot" hidden></div>
+    </section>
+
+    <!-- ADVISOR -->
+    <section id="view-advisor" class="view" hidden>
+      <div class="page-head">
+        <h1 data-i18n="adv_t"></h1>
+        <p class="muted lead" data-i18n="adv_d"></p>
+      </div>
+      <div class="card adv-pick"><label class="field"><span data-i18n="adv_disease"></span><select id="advDisease"></select></label></div>
+      <div id="advPlan" class="plan-slot"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="view-history" class="view" hidden>
+      <div class="page-head row">
+        <div><h1 data-i18n="hist_t"></h1><p class="muted lead" data-i18n="hist_d"></p></div>
+        <button class="btn btn-ghost btn-sm" id="histClear" hidden><svg class="ic"><use href="#i-trash"/></svg><span data-i18n="hist_clear"></span></button>
+      </div>
+      <div id="histBody"></div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="view-profile" class="view" hidden>
+      <div class="page-head"><h1 data-i18n="prof_t"></h1></div>
+      <div id="profBody"></div>
+    </section>
+
+    <footer class="foot"><span data-i18n="foot_l"></span><span data-i18n="foot_r"></span></footer>
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    <a href="#/" data-route="diagnose"><svg class="ic"><use href="#i-camera"/></svg><span data-i18n="nav_diagnose"></span></a>
+    <a href="#/advisor" data-route="advisor"><svg class="ic"><use href="#i-advisor"/></svg><span data-i18n="nav_advisor"></span></a>
+    <a href="#/history" data-route="history"><svg class="ic"><use href="#i-history"/></svg><span data-i18n="nav_history"></span></a>
+    <a href="#/profile" data-route="profile"><svg class="ic"><use href="#i-user"/></svg><span data-i18n="nav_profile"></span></a>
+  </nav>
+</div>
+
+<dialog id="dlg" class="dlg"><div class="dlg-in" id="dlgBody"></div></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

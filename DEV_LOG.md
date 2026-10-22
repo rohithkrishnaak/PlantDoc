@@ -26,7 +26,8 @@
          ├── Top-3 Ranked Predictions with Confidence Bars
          ├── 🔬 Grad-CAM Heatmap (Visual Explainability / Saliency)
          ├── 🌐 Multilingual UI (English / हिंदी / தமிழ்)
-         └── 🌾 Agronomic Care Notes (ICAR / TNAU extension guidelines)
+         ├── 🌾 Agronomic Care Notes (ICAR / TNAU extension guidelines)
+         └── 🧑‍🌾 Expert Action Plan (urgency, doses for your acres, spray calendar, KVK escalation)
 ```
 
 | File | Role |
@@ -46,7 +47,11 @@
 | `src/i18n.py` | Multilingual localization dictionary for English, Hindi, and Tamil (Stretch Goal 2) |
 | `src/agri_advisory.py` | Expert agronomic care notes cited from ICAR and TNAU (Stretch Goal 3) |
 | `evaluate.py` | Held-out test evaluation, confusion matrix, and coverage curve plotter |
-| `app.py` | Streamlit mobile-first UI with camera input, language toggle, and explainability tabs |
+| `server.py` | FastAPI app: `/api/diagnose` (quality gate → model → trust → plan), `/api/advisor`, accounts, history; serves `web/` |
+| `web/` | Static front end (HTML/CSS/JS): login, diagnose, expert advisor, history, profile; EN / HI / TA, light / dark |
+| `src/accounts.py` | SQLite users, scrypt passwords, hashed session tokens, profiles, diagnosis history |
+| `src/expert_system.py` | Rule-based agronomist: urgency, treatment track, farm-scaled doses, spray calendar, escalation (Stretch Goal 4) |
+| `tests/test_web.py` | Expert-system and accounts tests (no model needed) |
 
 ---
 
@@ -205,6 +210,25 @@
 1. **Grad-CAM Saliency Maps (`src/gradcam.py`):** Visual explainability hooked to the ConvNeXt branch of the hybrid (labelled as such in the UI). Shows farmers that the model inspects actual necrotic lesions rather than soil or fingers.
 2. **Multilingual Localization (`src/i18n.py`):** UI strings, retake advice, and disease terminology fully translated into Hindi (हिन्दी) and Tamil (தமிழ்).
 3. **Agronomic Care Notes (`src/agri_advisory.py`):** Curated cultural and chemical disease management advice cited directly from ICAR-CPRI, ICAR-IIHR, and TNAU Agritech portals.
+4. **Expert Advisor (`src/expert_system.py`):** Turns a diagnosis plus field conditions into an action plan. See 5.
+
+### 5. Web Front End, Accounts & Expert Advisor (22 Oct evening)
+- **Why:** the Streamlit demo showed a diagnosis but not what to do next, and had no way to follow one field over time. It was replaced by a FastAPI server (`server.py`) with a static front end (`web/`), so the model and the UI deploy as one Docker image (port 7860, `Dockerfile`).
+- **Same safety path:** quality gate → classifier → out-of-distribution check → Mamdani trust engine. The server returns one of `REJECTED_QUALITY`, `REJECTED_OOD`, `UNCERTAIN`, `TRUSTED`. The "not sure" and "not a supported leaf" states are shown as such and are never replaced by a guess. The UI makes no model claims of its own; the loaded weights and trust threshold are reported by `GET /api/health`.
+- **Expert system (`src/expert_system.py`).** Forward-chaining rules over derived facts, with every fired rule returned for the "Why this advice?" panel.
+  - Facts: severity (the farmer's choice, else estimated from the lesion-pixel ratio `brown_ratio` already computed by the quality gate, else assumed moderate), weather risk (humidity, rain, late blight's preference for humid weather), growth stage, acres, organic-only.
+  - Urgency = disease base (late blight 3, bacterial spot 2, early blight 1, healthy 0) + severity (0 / 1 / 2) + 1 if weather risk is high, capped at 4 ("act today").
+  - Track: preventive (healthy), organic-first (mild, calm weather, not late blight, or organic-only), otherwise integrated cultural + chemical. Chemicals are never listed for organic-only users.
+  - Doses are the ICAR / TNAU figures already in `src/agri_advisory.py`, scaled to acres with a spray volume per acre by growth stage (100 / 200 / 300 / 400 / 400 L). The spray calendar uses the disease's interval (shortened in wet weather).
+  - Escalation: an uncertain model result **holds all spraying** and requires expert confirmation. Severe late blight **requires** expert confirmation; severe bacterial spot, organic-only with late blight, and "act today" cases **recommend** a KVK visit (Kisan Call Centre 1800-180-1551).
+  - English, Hindi and Tamil text for every rule. The Hindi and Tamil wording still needs the native-speaker review listed in the checklist.
+- **Accounts (`src/accounts.py`).** Optional; guests can diagnose and use the advisor. scrypt password hashes, random session tokens stored only as SHA-256, `HttpOnly` + `SameSite=Lax` cookie, a required `X-Requested-With` header on every write, login throttling (8 attempts / 5 min), password change signs out other devices, and deleting an account deletes its history. SQLite file at `DB_PATH` (default `data/plantdoc.db`, git-ignored; mount a volume to keep it across container restarts).
+- **History:** a 200 px thumbnail, the top-3 and the inputs are stored (last 100 per user). The plan is rebuilt from those inputs when opened, so it appears in the current language.
+- **Limits:** the photo-based severity is a rough lesion-area proxy and is labelled "estimated from photo"; the dose table covers the 6 classes only; the plan is decision support, not a replacement for the product label or a local agronomist.
+
+### 6. Repository Clean-up (22 Oct)
+- Removed superseded or one-off files: the EfficientNet-B0 trainer (`train.py`) and its metrics, the dataset extract/download scripts (`src/prepare_dataset.py`, `src/download_plantwild.py`), and regenerable outputs (`experiments/mlflow_leaderboard.csv`, `experiments/duplicates_check.json`, now git-ignored). The old checkpoints, Streamlit app and hackathon deck/docs were already removed on main.
+- Everything is still in git history. File names in the sections above are kept as a historical record.
 
 ---
 
@@ -236,7 +260,7 @@
 - [x] Image Quality Gate implemented & unit tested
 - [x] Mamdani Fuzzy Trust Engine active with exact `"Not sure..."` message
 - [x] Dataset extracted (541 train, 52 test images across 6 classes)
-- [x] Model trained & weights saved (`weights/plantdoc_effnet_b0.pth`)
+- [x] Baseline EfficientNet-B0 trained (weights since removed; superseded by the hybrid and the fine-tuned model)
 - [x] Held-out evaluation performed & `coverage_curve.png` generated
 - [x] Train/test de-duplication and label-conflict removal (`src/dedup.py`): 510 train / 45 test
 - [x] Final model ConvNeXt-T + DINOv2-S + CLAHE: 66.7% top-1, 97.8% top-3, 89.5% accuracy on answered photos
@@ -253,9 +277,9 @@
 - [x] Stretch Goal 2 (Multilingual UI: EN, HI, TA) completed
 - [x] Stretch Goal 3 (ICAR/TNAU Care Notes) completed
 - [x] Automated test suite passing (`tests/test_pipeline.py`)
-- [x] PowerPoint Pitch Deck generated (`PlantDoc_Pitch_Deck.pptx`)
-- [x] 5-minute video presentation script drafted (`DEMO_SCRIPT.md`)
-- [x] Social media posts drafted (`SOCIAL_POSTS.md`)
+- [x] Web front end (`web/`, `server.py`): login, profile, history, expert advisor, EN / HI / TA, mobile layout
+- [x] Expert system and accounts tests passing (`tests/test_web.py`)
+- [x] Dockerfile for Hugging Face Spaces (`sdk: docker`)
 - [x] Git repo initialized
 
 **Commit history note:** on the first evening, work was done locally and committed in batches (several commits within seconds at 23:09 and 23:37 on 21 Oct, and at 01:20 on 22 Oct). Commit times show when work was committed, not when each piece was written. From the morning of 22 Oct, work is committed as each task finishes.

@@ -17,4 +17,6 @@ mlflow.db
 .trash/
 
 .claude/
+Screenshot*.png
 experiments/mlflow_leaderboard.csv
+experiments/duplicates_check.json
