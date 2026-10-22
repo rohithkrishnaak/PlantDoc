@@ -21,7 +21,17 @@ except ImportError:
     pass
 
 import streamlit as st
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+try:  # iPhone photos are HEIC by default
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    UPLOAD_TYPES = ["jpg", "jpeg", "png", "webp", "heic", "heif"]
+except ImportError:
+    UPLOAD_TYPES = ["jpg", "jpeg", "png", "webp"]
+
+MAX_SIDE = 2048  # phone photos are downscaled; the pipeline works at <= 512 px anyway
 
 from src.agri_advisory import get_advisory
 from src.fuzzy_engine import UNCERTAIN_MESSAGE, evaluate_trust
@@ -77,19 +87,33 @@ model = load_model()
 if model.is_demo:
     st.info(t("demo_mode_banner", lang, source=model.weights_source))
 
+def _mark_latest(which: str):
+    st.session_state["latest_input"] = which
+
+
 tab_cam, tab_up = st.tabs([t("tab_camera", lang), t("tab_upload", lang)])
 with tab_cam:
-    cam = st.camera_input(t("camera_label", lang))
+    cam = st.camera_input(t("camera_label", lang), key="cam", on_change=_mark_latest, args=("cam",))
 with tab_up:
-    up = st.file_uploader(t("upload_label", lang), type=["jpg", "jpeg", "png", "webp"])
+    up = st.file_uploader(t("upload_label", lang), type=UPLOAD_TYPES, key="up",
+                          on_change=_mark_latest, args=("up",))
 
-source = cam or up
+# Use whichever input the user touched most recently when both hold a photo.
+if cam is not None and up is not None:
+    source = up if st.session_state.get("latest_input") == "up" else cam
+else:
+    source = cam or up
 if source is None:
     st.info(t("tip_initial", lang))
     st.stop()
 
 # 1. Display Image (respecting phone EXIF rotation)
-image = ImageOps.exif_transpose(Image.open(source)).convert("RGB")
+try:
+    image = ImageOps.exif_transpose(Image.open(source)).convert("RGB")
+except (UnidentifiedImageError, OSError):
+    st.error("Could not read this file as an image. Please upload a JPG or PNG photo.")
+    st.stop()
+image.thumbnail((MAX_SIDE, MAX_SIDE))
 st.image(image, width="stretch", caption="Captured Leaf")
 
 # 2. Image Quality Gate
@@ -100,17 +124,18 @@ memberships = check_quality.last["memberships"]
 st.progress(q_score, text=f"{t('quality_score_text', lang)}: {q_score:.2f} / 1.00")
 
 if not passed:
-    # Select localized tip based on dominant membership
-    if memberships["blur"]["blurry"] > 0.3 and memberships["brightness"]["dark"] < 0.3:
-        localized_tip = t("tip_blurry", lang)
-    elif memberships["brightness"]["dark"] > 0.3:
+    # Select localized tip(s); same priority as quality_gate._retake_tip (lighting first)
+    if memberships["brightness"]["dark"] > 0.3:
         localized_tip = t("tip_dark", lang)
     elif memberships["brightness"]["over"] > 0.3:
         localized_tip = t("tip_overexposed", lang)
-    elif memberships["coverage"]["low"] > 0.3:
-        localized_tip = t("tip_low_coverage", lang)
     else:
-        localized_tip = t("tip_borderline", lang)
+        tips = []
+        if max(memberships["blur"]["blurry"], memberships["blur"]["streaked"]) > 0.3:
+            tips.append(t("tip_blurry", lang))
+        if memberships["coverage"]["low"] > 0.3:
+            tips.append(t("tip_low_coverage", lang))
+        localized_tip = " ".join(tips) or t("tip_borderline", lang)
 
     st.error(f"{t('quality_rejected', lang)} {localized_tip}")
     with st.expander("🔍 Quality diagnostics"):
@@ -119,19 +144,23 @@ if not passed:
 
 # 3. Model Inference & Trust Engine
 with st.spinner(t("diagnosing", lang)):
-    preds = model.predict(image, top_k=3)
+    preds, similarity, is_ood = model.diagnose(image, top_k=3)
+
+# 3b. Out-of-distribution check: not a supported tomato/potato leaf
+if is_ood:
+    st.error(t("ood_rejected", lang))
+    with st.expander("🔍 Why?"):
+        st.write(f"Similarity to the closest training photo: `{similarity:.3f}` "
+                 f"(minimum `{float(model.model.ood_threshold):.3f}`)")
+    st.stop()
 
 top1_name, top1_conf = preds[0]
-trust = evaluate_trust(q_score, top1_conf)
+trust = evaluate_trust(q_score, top1_conf, threshold=model.trust_threshold)
 
 # 4. Results Presentation
 if trust.status == "UNCERTAIN":
     st.warning(t("uncertain_warning", lang))
-    st.write(
-        f"**Reason:** Trust score is **{trust.trust:.2f}** (Threshold: 0.65). "
-        "Either photo quality was borderline or disease features were ambiguous. "
-        "A confident misdiagnosis can lead to wrong pesticide application."
-    )
+    st.write(t("uncertain_reason", lang, trust=trust.trust, threshold=model.trust_threshold))
 else:
     translated_disease = t_disease(top1_name, lang)
     st.success(f"{t('diagnosis_title', lang)}: **{translated_disease}**")
@@ -150,9 +179,11 @@ else:
             heatmap_rgb, blended_rgb = gradcam.generate(image)
             col_orig, col_cam = st.columns(2)
             with col_orig:
-                st.image(image, caption="Original Leaf", use_container_width=True)
+                st.image(image, caption="Original Leaf", width="stretch")
             with col_cam:
-                st.image(blended_rgb, caption="Grad-CAM Saliency", use_container_width=True)
+                st.image(blended_rgb, caption=("Grad-CAM (ConvNeXt branch of the hybrid)"
+                                               if model.model.__class__.__name__ == "HybridNet"
+                                               else "Grad-CAM Saliency"), width="stretch")
         except Exception as e:
             st.info(f"Grad-CAM visualization unavailable: {e}")
 
@@ -168,6 +199,6 @@ else:
 
 # Diagnostics Expander
 with st.expander(t("why_result", lang)):
-    st.write(f"**{t('trust_score_title', lang)}:** `{trust.trust:.2f}` (Threshold: 0.65)")
+    st.write(f"**{t('trust_score_title', lang)}:** `{trust.trust:.2f}` (Threshold: {model.trust_threshold:.2f})")
     st.write(f"**Top-1 Softmax Confidence:** `{top1_conf:.2f}` | **Image Quality Score:** `{q_score:.2f}`")
     st.json({"features": details, "fuzzy_memberships": trust.memberships})

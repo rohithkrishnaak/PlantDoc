@@ -1,11 +1,16 @@
-torch
-torchvision
-timm
-opencv-python
-scikit-fuzzy
-streamlit
-pillow
-numpy
-python-dotenv
-scikit-learn
-matplotlib
+# CPU wheels for deployment (Hugging Face Spaces). For local GPU use, install the
+# CUDA build first, e.g. pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+torchvision>=0.19
+timm>=1.0.9,<2
+huggingface_hub>=0.24
+opencv-python-headless>=4.9
+scikit-fuzzy>=0.5
+scikit-learn>=1.4
+streamlit>=1.40
+pillow>=10.0
+pillow-heif>=0.16
+numpy>=1.26
+python-dotenv>=1.0
+matplotlib>=3.8
